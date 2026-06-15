@@ -1,0 +1,8 @@
+# Игнорируем локальные node_modules и артефакты сборки Rust
+frontend/node_modules
+target
+.git
+.env
+keys
+docker-compose.yml
+Dockerfile

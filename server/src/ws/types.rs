@@ -40,6 +40,27 @@ pub enum ServerEvent {
         guild_id: Uuid,
         status: UserStatus,
     },
+    /// Редактирование сообщения
+    MessageUpdate {
+        message_id: Uuid,
+        channel_id: Uuid,
+        content: String,
+        edited_at: chrono::DateTime<chrono::Utc>,
+    },
+    /// Удаление сообщения
+    MessageDelete {
+        message_id: Uuid,
+        channel_id: Uuid,
+    },
+    /// Создание канала
+    ChannelCreate {
+        channel: WsChannel,
+    },
+    /// Удаление канала
+    ChannelDelete {
+        channel_id: Uuid,
+        guild_id: Uuid,
+    },
     /// Ответ на heartbeat
     HeartbeatAck,
     /// Ошибка
@@ -72,6 +93,16 @@ pub enum ClientEvent {
         guild_id: Uuid,
         channel_id: Uuid,
     },
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct WsChannel {
+    pub id: Uuid,
+    pub guild_id: Uuid,
+    pub name: String,
+    pub r#type: String,
+    pub position: i32,
+    pub user_limit: Option<i32>,
 }
 
 #[derive(Serialize, Clone, Debug)]

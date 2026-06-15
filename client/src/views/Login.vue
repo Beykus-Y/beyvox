@@ -1,7 +1,34 @@
 <template>
   <div class="login-page">
     <div class="login-glow" />
-    <div class="login-box">
+    
+    <div v-if="showVerify" class="login-box">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/>
+          </svg>
+        </div>
+        <span class="logo-text">Проверь почту</span>
+      </div>
+      <p class="subtitle" style="line-height: 1.5; margin-bottom: 24px;">
+        Мы отправили письмо на почту <strong style="color: var(--text);">{{ form.email }}</strong> с ссылкой для подтверждения.
+      </p>
+
+      <p v-if="error" class="error" style="margin-bottom: 14px;">{{ error }}</p>
+      
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button class="submit-btn" :disabled="loading" @click="checkEmailVerified">
+          <span v-if="loading" class="spinner" />
+          {{ loading ? 'Проверяем...' : 'Я подтвердил почту' }}
+        </button>
+        <button class="btn-ghost-action" @click="enterApp">
+          Подтвердить позже
+        </button>
+      </div>
+    </div>
+
+    <div v-else class="login-box">
       <div class="logo">
         <div class="logo-icon">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
@@ -18,10 +45,7 @@
       </div>
 
       <form @submit.prevent="submit">
-        <div class="field">
-          <label>Сервер авторизации</label>
-          <input v-model="centralUrl" placeholder="https://beyvox.beykus.fun" />
-        </div>
+
 
         <div class="field">
           <label>{{ mode === 'login' ? 'Логин или Email' : 'Логин' }}</label>
@@ -60,22 +84,43 @@ const auth = useAuthStore()
 const mode = ref<'login' | 'register'>('login')
 const loading = ref(false)
 const error = ref('')
-const centralUrl = ref(auth.centralUrl)
+const showVerify = ref(false)
 const form = ref({ login: '', email: '', password: '' })
 
 async function submit() {
   error.value = ''
   loading.value = true
-  auth.setCentralUrl(centralUrl.value)
   try {
     if (mode.value === 'login') {
       await auth.login(form.value.login, form.value.password)
+      router.push('/app')
     } else {
       await auth.register(form.value.login, form.value.email, form.value.password)
+      showVerify.value = true
     }
-    router.push('/app')
   } catch (e: any) {
     error.value = e?.response?.data?.error || 'Ошибка подключения'
+  } finally {
+    loading.value = false
+  }
+}
+
+function enterApp() {
+  router.push('/app')
+}
+
+async function checkEmailVerified() {
+  error.value = ''
+  loading.value = true
+  try {
+    const verified = await auth.checkVerificationStatus()
+    if (verified) {
+      router.push('/app')
+    } else {
+      error.value = 'Почта ещё не подтверждена. Пожалуйста, перейдите по ссылке в письме.'
+    }
+  } catch (e: any) {
+    error.value = e?.response?.data?.error || 'Не удалось проверить статус подтверждения'
   } finally {
     loading.value = false
   }
@@ -83,6 +128,24 @@ async function submit() {
 </script>
 
 <style scoped>
+.btn-ghost-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-ghost-action:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
 .login-page {
   height: 100%;
   display: flex;

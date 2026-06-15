@@ -65,6 +65,22 @@ export const useWsStore = defineStore('ws', () => {
         guild.addMessage(event.d.message)
         break
 
+      case 'MESSAGE_UPDATE':
+        guild.updateMessage(event.d.message_id, event.d.content, event.d.edited_at)
+        break
+
+      case 'MESSAGE_DELETE':
+        guild.deleteMessage(event.d.message_id)
+        break
+
+      case 'CHANNEL_CREATE':
+        guild.addChannel(event.d.channel)
+        break
+
+      case 'CHANNEL_DELETE':
+        guild.removeChannel(event.d.channel_id)
+        break
+
       case 'VOICE_STATE_UPDATE':
         voice.updateVoiceState(event.d)
         break

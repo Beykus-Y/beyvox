@@ -11,7 +11,6 @@
     >
       <span>{{ server.name[0]?.toUpperCase() }}</span>
       <div class="server-tooltip">{{ server.name }}</div>
-      <div v-if="server.url === activeUrl" class="active-indicator" />
     </div>
 
     <div v-if="servers.length" class="divider" />
@@ -48,6 +47,7 @@ defineEmits(['select-server', 'add-server', 'remove-server', 'open-settings'])
   padding: 8px 0;
   gap: 4px;
   overflow-y: auto;
+  overflow-x: hidden;
   flex-shrink: 0;
 }
 .server-icon {
@@ -68,18 +68,7 @@ defineEmits(['select-server', 'add-server', 'remove-server', 'open-settings'])
   flex-shrink: 0;
 }
 .server-icon:hover { border-radius: 14px; color: var(--accent); background: var(--bg-hover); }
-.server-icon.active { border-radius: 14px; color: var(--accent); background: var(--bg); }
-.active-indicator {
-  position: absolute;
-  left: -8px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 24px;
-  background: var(--accent);
-  border-radius: 0 3px 3px 0;
-  pointer-events: none;
-}
+.server-icon.active { border-radius: 14px; color: var(--accent); background: var(--bg); box-shadow: -4px 0 0 0 var(--accent); }
 .server-icon.add-btn { color: var(--green); }
 .server-icon.add-btn:hover { border-radius: 14px; }
 .server-icon.settings-btn { color: var(--text3); }

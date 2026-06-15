@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: build backend
-FROM rust:1.85-slim AS builder
+FROM rust:1.88-slim AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY Cargo.toml Cargo.lock* ./
@@ -21,6 +21,6 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 WORKDIR /app
 COPY --from=builder /app/target/release/beyvox-central ./
 COPY --from=builder /app/migrations/ ./migrations/
-COPY --from=frontend /app/frontend/dist/ ./static/
+COPY --from=frontend /app/static/ ./static/
 EXPOSE 3000
 CMD ["./beyvox-central"]

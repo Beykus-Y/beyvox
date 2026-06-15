@@ -1,6 +1,15 @@
 <template>
-  <div class="channel-sidebar">
+  <div class="channel-sidebar" :class="{ collapsed }">
+    <!-- Thin strip shown when collapsed -->
+    <div v-if="collapsed" class="expand-strip" @click="$emit('toggle')" title="Развернуть">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </div>
+
+    <template v-else>
     <div class="guild-header">
+      <button class="collapse-btn" title="Свернуть" @click="$emit('toggle')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
+      </button>
       <span class="guild-name">{{ guildName }}</span>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text3);flex-shrink:0">
         <path d="M7 10l5 5 5-5z"/>
@@ -75,6 +84,7 @@
         </button>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -94,9 +104,10 @@ const props = defineProps<{
   isDeafened: boolean
   voiceStates: Map<string, VoiceState>
   activeSpeakers: Set<string>
+  collapsed?: boolean
 }>()
 
-defineEmits(['select-channel', 'join-voice', 'toggle-mute', 'toggle-deafen'])
+defineEmits(['select-channel', 'join-voice', 'toggle-mute', 'toggle-deafen', 'toggle'])
 
 const textChannels = computed(() => props.channels.filter((c) => c.type === 'text'))
 const voiceChannels = computed(() => props.channels.filter((c) => c.type === 'voice'))
@@ -118,10 +129,25 @@ function participantCount(channelId: string): number {
   flex-direction: column;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
+  overflow: hidden;
+  transition: width 0.2s ease;
 }
+.channel-sidebar.collapsed {
+  width: 20px;
+  cursor: pointer;
+  min-width: 20px;
+}
+.expand-strip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+}
+.expand-strip:hover { color: var(--text); }
 .guild-header {
   height: 48px;
-  padding: 0 12px 0 16px;
+  padding: 0 12px 0 8px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -130,6 +156,15 @@ function participantCount(channelId: string): number {
   font-size: 14px;
   flex-shrink: 0;
 }
+.collapse-btn {
+  width: 24px; height: 24px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text3);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.collapse-btn:hover { background: var(--bg-hover); color: var(--text2); }
 .guild-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .channels-list { flex: 1; overflow-y: auto; padding: 8px 0; }

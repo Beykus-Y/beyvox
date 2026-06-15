@@ -52,6 +52,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/register", post(auth::handlers::register))
         .route("/auth/login", post(auth::handlers::login))
         .route("/auth/refresh", post(auth::handlers::refresh))
+        .route("/auth/verify", get(auth::handlers::verify_email))
+        .route("/auth/status", get(auth::handlers::status))
         .route("/.well-known/jwks.json", get(auth::handlers::jwks))
         .route("/servers", get(catalog::handlers::list_servers))
         .route("/servers", post(catalog::handlers::register_server))
@@ -60,6 +62,7 @@ async fn main() -> anyhow::Result<()> {
 
     let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "static".into());
     let app = Router::new()
+        .nest("/api", api.clone())
         .nest("/", api)
         .fallback_service(
             ServeDir::new(&static_dir)

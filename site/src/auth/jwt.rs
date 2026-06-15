@@ -48,8 +48,7 @@ impl JwtKeys {
     }
 
     pub fn verify(&self, token: &str) -> Result<Claims> {
-        let mut validation = Validation::new(Algorithm::RS256);
-        validation.set_issuer(&["beyvox"]);
+        let validation = Validation::new(Algorithm::RS256);
         let data = decode::<Claims>(token, &self.decoding, &validation)?;
         Ok(data.claims)
     }

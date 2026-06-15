@@ -1,4 +1,12 @@
 <template>
+  <div v-if="auth.isLoggedIn && !auth.emailVerified && !isBannerDismissed" class="verify-banner">
+    <div class="container verify-banner-inner">
+      <span class="verify-banner-text">
+        ⚠️ Пожалуйста, подтвердите вашу почту. Письмо с ссылкой подтверждения отправлено на ваш email.
+      </span>
+      <button class="verify-banner-close" @click="isBannerDismissed = true">✕</button>
+    </div>
+  </div>
   <nav class="nav">
     <div class="container nav-inner">
       <RouterLink to="/" class="logo">BeyVox</RouterLink>
@@ -19,11 +27,47 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useAuthStore } from './stores/auth'
 const auth = useAuthStore()
+const isBannerDismissed = ref(false)
 </script>
 
 <style scoped>
+.verify-banner {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.verify-banner-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+}
+.verify-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.verify-banner-close {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.1s;
+}
+.verify-banner-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
 .nav {
   position: sticky;
   top: 0;

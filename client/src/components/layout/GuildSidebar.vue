@@ -1,6 +1,15 @@
 <template>
-  <div class="guild-sidebar">
+  <div class="guild-sidebar" :class="{ collapsed }">
+    <!-- Thin strip shown when collapsed -->
+    <div v-if="collapsed" class="expand-strip" @click="$emit('toggle')" title="Развернуть">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </div>
+
+    <template v-else>
     <div class="server-header">
+      <button class="collapse-btn" title="Свернуть" @click="$emit('toggle')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
+      </button>
       <span class="server-name">{{ serverName }}</span>
       <button class="create-btn" title="Создать сервер" @click="$emit('create-guild')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -30,6 +39,7 @@
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -40,8 +50,9 @@ defineProps<{
   serverName: string
   guilds: Guild[]
   activeGuildId: string | null
+  collapsed?: boolean
 }>()
-defineEmits(['select-guild', 'create-guild'])
+defineEmits(['select-guild', 'create-guild', 'toggle'])
 </script>
 
 <style scoped>
@@ -52,17 +63,41 @@ defineEmits(['select-guild', 'create-guild'])
   flex-direction: column;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
+  overflow: hidden;
+  transition: width 0.2s ease;
 }
+.guild-sidebar.collapsed {
+  width: 20px;
+  cursor: pointer;
+  min-width: 20px;
+}
+.expand-strip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+}
+.expand-strip:hover { color: var(--text); }
 
 .server-header {
   height: 48px;
-  padding: 0 12px 0 16px;
+  padding: 0 8px 0 8px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+.collapse-btn {
+  width: 24px; height: 24px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text3);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.collapse-btn:hover { background: var(--bg-hover); color: var(--text2); }
 .server-name {
   flex: 1;
   font-size: 14px;

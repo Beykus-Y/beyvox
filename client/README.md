@@ -1,7 +1,45 @@
-# Tauri + Vue + TypeScript
+# BeyVox Client (Клиентское приложение)
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Кросс-платформенное десктопное приложение BeyVox. Построено на базе **Tauri 2**, обеспечивающего интеграцию с операционной системой на уровне Rust, и интерфейса на **Vue 3** (TypeScript, Vite).
 
-## Recommended IDE Setup
+## Возможности
+- Легковесный и быстрый интерфейс в темных тонах.
+- Автоматическая авторизация по токену и отслеживание статуса подтверждения почты.
+- Подключение к локальным и внешним серверам BeyVox.
+- Полная поддержка голосовой и текстовой связи в реальном времени.
 
-- [VS Code](https://code.visualstudio.com/) + [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## Стек технологий
+- **Системный слой / Контейнер**: Tauri (Rust)
+- **Фронтенд-фреймворк**: Vue 3 + TypeScript
+- **Сборщик**: Vite
+- **Стейт-менеджер**: Pinia
+- **HTTP клиент**: Axios
+
+## Установка и запуск
+
+### Требования
+1. **Node.js** (версия 18+).
+2. **Rust** (необходим для сборки Tauri-приложения).
+3. Системные зависимости для сборки Tauri (подробнее см. [руководство Tauri](https://tauri.app/start/)).
+
+### Настройка окружения
+Перед запуском скопируйте файл конфигурации окружения:
+```bash
+cp .env.example .env
+```
+В файле `.env` вы можете переопределить адрес центрального сервера авторизации по умолчанию (например, `VITE_CENTRAL_URL=http://localhost:3000` для локальной разработки).
+
+### Запуск в режиме разработки
+Установите зависимости npm и запустите Tauri в режиме разработчика:
+```bash
+npm install
+npm run tauri dev
+```
+Будет запущен Vite-сервер разработки (`http://localhost:1420`), а затем откроется десктопное окно приложения BeyVox. Любые изменения в коде интерфейса будут мгновенно отображаться в окне благодаря HMR (Hot Module Replacement).
+
+### Сборка релизной версии
+Для компиляции готового дистрибутива под вашу операционную систему выполните:
+```bash
+npm run tauri build
+```
+Готовые установщики появятся в директории `src-tauri/target/release/bundle/`.

@@ -99,6 +99,18 @@ export const useGuildStore = defineStore('guild', () => {
     activeChannelId.value = channelId
   }
 
+  async function loadMoreMessages(guildId: string, channelId: string) {
+    const oldest = messages.value[0]
+    if (!oldest) return
+    const { data } = await apiClient().get(
+      `/guilds/${guildId}/channels/${channelId}/messages`,
+      { params: { before: oldest.id, limit: 50 } }
+    )
+    if (data.length > 0) {
+      messages.value = [...data, ...messages.value]
+    }
+  }
+
   async function sendMessage(guildId: string, channelId: string, content: string, replyTo?: string) {
     await apiClient().post(`/guilds/${guildId}/channels/${channelId}/messages`, {
       content,
@@ -117,6 +129,33 @@ export const useGuildStore = defineStore('guild', () => {
     }
   }
 
+  function updateMessage(messageId: string, content: string, editedAt: string) {
+    const msg = messages.value.find(m => m.id === messageId)
+    if (msg) {
+      msg.content = content
+      msg.edited_at = editedAt
+    }
+  }
+
+  function deleteMessage(messageId: string) {
+    messages.value = messages.value.filter(m => m.id !== messageId)
+  }
+
+  function addChannel(channel: Channel) {
+    if (!channels.value.find(c => c.id === channel.id)) {
+      channels.value.push(channel)
+      channels.value.sort((a, b) => a.position - b.position)
+    }
+  }
+
+  function removeChannel(channelId: string) {
+    channels.value = channels.value.filter(c => c.id !== channelId)
+    if (activeChannelId.value === channelId) {
+      activeChannelId.value = null
+      messages.value = []
+    }
+  }
+
   function setGuilds(list: Guild[]) {
     guilds.value = list
   }
@@ -124,7 +163,7 @@ export const useGuildStore = defineStore('guild', () => {
   return {
     guilds, activeGuildId, activeChannelId, channels, messages, members, serverUrl,
     connectToServer, createGuild, joinByInvite, reset,
-    loadChannels, loadMessages, sendMessage, loadMembers,
-    addMessage, setGuilds,
+    loadChannels, loadMessages, loadMoreMessages, sendMessage, loadMembers,
+    addMessage, updateMessage, deleteMessage, addChannel, removeChannel, setGuilds,
   }
 })

@@ -156,26 +156,38 @@ pub async fn send_message(
 pub async fn edit_message(
     State(state): State<AppState>,
     user: AuthUser,
-    Path((_guild_id, _channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((guild_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<EditMessageRequest>,
 ) -> AppResult<Json<serde_json::Value>> {
     if body.content.is_empty() || body.content.len() > 4000 {
         return Err(AppError::BadRequest("content must be 1-4000 chars".into()));
     }
 
-    let result = sqlx::query(
+    let row = sqlx::query(
         "UPDATE messages SET content = $1, edited_at = NOW()
-         WHERE id = $2 AND author_id = $3",
+         WHERE id = $2 AND author_id = $3
+         RETURNING edited_at",
     )
     .bind(&body.content)
     .bind(message_id)
     .bind(user.user_id)
-    .execute(&state.db)
+    .fetch_optional(&state.db)
     .await?;
 
-    if result.rows_affected() == 0 {
-        return Err(AppError::Forbidden);
-    }
+    let row = row.ok_or(AppError::Forbidden)?;
+    let edited_at: chrono::DateTime<chrono::Utc> = row.get("edited_at");
+
+    broadcast_to_guild(
+        &state,
+        guild_id,
+        ServerEvent::MessageUpdate {
+            message_id,
+            channel_id,
+            content: body.content,
+            edited_at,
+        },
+    )
+    .await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -183,7 +195,7 @@ pub async fn edit_message(
 pub async fn delete_message(
     State(state): State<AppState>,
     user: AuthUser,
-    Path((_guild_id, _channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((guild_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> AppResult<Json<serde_json::Value>> {
     let result = sqlx::query(
         "DELETE FROM messages WHERE id = $1 AND author_id = $2",
@@ -196,6 +208,13 @@ pub async fn delete_message(
     if result.rows_affected() == 0 {
         return Err(AppError::Forbidden);
     }
+
+    broadcast_to_guild(
+        &state,
+        guild_id,
+        ServerEvent::MessageDelete { message_id, channel_id },
+    )
+    .await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

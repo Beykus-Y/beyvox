@@ -16,8 +16,10 @@
       :server-name="serversStore.activeServer?.name || ''"
       :guilds="guild.guilds"
       :active-guild-id="guild.activeGuildId"
+      :collapsed="!guildSidebarOpen"
       @select-guild="selectGuild"
       @create-guild="openCreateGuild"
+      @toggle="guildSidebarOpen = !guildSidebarOpen"
     />
 
     <!-- Если инстанс не выбран — заглушка вместо guild sidebar -->
@@ -50,10 +52,12 @@
       :is-deafened="voice.isDeafened"
       :voice-states="voice.voiceStates"
       :active-speakers="voice.activeSpeakers"
+      :collapsed="!channelSidebarOpen"
       @select-channel="selectTextChannel"
       @join-voice="joinVoice"
       @toggle-mute="voice.toggleMute()"
       @toggle-deafen="voice.toggleDeafen()"
+      @toggle="channelSidebarOpen = !channelSidebarOpen"
     />
 
     <!-- Нет выбранной гильдии — подсказка в основной области -->
@@ -256,6 +260,10 @@ const inviteCodeInput = ref('')
 // Загрузка сообщений
 const messagesLoading = ref(false)
 
+// Состояние сайдбаров
+const guildSidebarOpen = ref(true)
+const channelSidebarOpen = ref(true)
+
 // Settings
 const activeSettingsTab = ref('account')
 const settingsTabs = [
@@ -386,9 +394,17 @@ async function selectGuild(guildId: string) {
 
 async function selectTextChannel(channel: any) {
   if (channel.type !== 'text') return
+  // Optimistic: set channel immediately so ChatArea renders
+  guild.activeChannelId = channel.id
+  guild.messages = []
   messagesLoading.value = true
-  try { await guild.loadMessages(guild.activeGuildId!, channel.id) }
-  finally { messagesLoading.value = false }
+  try {
+    await guild.loadMessages(guild.activeGuildId!, channel.id)
+  } catch (e) {
+    console.error('Failed to load messages:', e)
+  } finally {
+    messagesLoading.value = false
+  }
 }
 
 function joinVoice(channel: any) {
@@ -406,7 +422,17 @@ async function onSend({ content, replyTo }: { content: string; replyTo: string |
   await guild.sendMessage(guild.activeGuildId, guild.activeChannelId, content, replyTo ?? undefined)
 }
 
-async function loadMore() {}
+async function loadMore() {
+  if (!guild.activeGuildId || !guild.activeChannelId || messagesLoading.value) return
+  messagesLoading.value = true
+  try {
+    await guild.loadMoreMessages(guild.activeGuildId, guild.activeChannelId)
+  } catch (e) {
+    console.error('Failed to load more messages:', e)
+  } finally {
+    messagesLoading.value = false
+  }
+}
 
 // === Настройки ===
 async function openSettings() {

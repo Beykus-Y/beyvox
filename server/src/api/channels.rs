@@ -4,6 +4,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{auth::AuthUser, error::{AppError, AppResult}, AppState};
+use crate::ws::{handler::broadcast_to_guild, types::{ServerEvent, WsChannel}};
 use super::guilds::ensure_member;
 
 #[derive(Serialize)]
@@ -92,27 +93,54 @@ pub async fn create_channel(
     .execute(&state.db)
     .await?;
 
-    Ok(Json(ChannelDto {
+    let dto = ChannelDto {
         id,
         guild_id,
         name: body.name,
         r#type: ch_type.into(),
         position,
         user_limit: body.user_limit,
-    }))
+    };
+
+    broadcast_to_guild(
+        &state,
+        guild_id,
+        ServerEvent::ChannelCreate {
+            channel: WsChannel {
+                id: dto.id,
+                guild_id: dto.guild_id,
+                name: dto.name.clone(),
+                r#type: dto.r#type.clone(),
+                position: dto.position,
+                user_limit: dto.user_limit,
+            },
+        },
+    )
+    .await;
+
+    Ok(Json(dto))
 }
 
 pub async fn delete_channel(
     State(state): State<AppState>,
     user: AuthUser,
-    Path((_guild_id, channel_id)): Path<(Uuid, Uuid)>,
+    Path((guild_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> AppResult<Json<serde_json::Value>> {
-    // TODO: проверить право MANAGE_CHANNELS
-    let _ = user;
-    sqlx::query("DELETE FROM channels WHERE id = $1")
+    ensure_member(&state, user.user_id, guild_id).await?;
+
+    sqlx::query("DELETE FROM channels WHERE id = $1 AND guild_id = $2")
         .bind(channel_id)
+        .bind(guild_id)
         .execute(&state.db)
         .await?;
+
+    broadcast_to_guild(
+        &state,
+        guild_id,
+        ServerEvent::ChannelDelete { channel_id, guild_id },
+    )
+    .await;
+
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

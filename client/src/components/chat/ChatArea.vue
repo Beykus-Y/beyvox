@@ -72,9 +72,16 @@ const replyTo = ref<string | null>(null)
 const messagesEl = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 
-watch(() => props.messages.length, () => {
+let prevScrollHeight = 0
+let isLoadMore = false
+
+watch(() => props.messages.length, (newLen, oldLen) => {
   nextTick(() => {
-    if (messagesEl.value) {
+    if (!messagesEl.value) return
+    if (isLoadMore && newLen > oldLen) {
+      messagesEl.value.scrollTop = messagesEl.value.scrollHeight - prevScrollHeight
+      isLoadMore = false
+    } else {
       messagesEl.value.scrollTop = messagesEl.value.scrollHeight
     }
   })
@@ -91,6 +98,8 @@ function send() {
 
 function onScroll() {
   if (messagesEl.value?.scrollTop === 0) {
+    prevScrollHeight = messagesEl.value.scrollHeight
+    isLoadMore = true
     emit('load-more')
   }
 }
