@@ -193,6 +193,14 @@
               </div>
             </div>
             <div class="settings-divider" />
+            <div class="settings-field">
+              <label>Access Token</label>
+              <div class="token-row">
+                <input class="token-input" type="password" :value="auth.accessToken" readonly />
+                <button class="btn-secondary" @click="copyToken">{{ tokenCopied ? 'Скопировано!' : 'Копировать' }}</button>
+              </div>
+            </div>
+            <div class="settings-divider" />
             <button class="btn-danger" @click="logout">Выйти из аккаунта</button>
           </template>
 
@@ -327,6 +335,7 @@ const channelSidebarOpen = ref(true)
 
 // Settings
 const activeSettingsTab = ref('account')
+const tokenCopied = ref(false)
 const settingsTabs = [
   { id: 'account', label: 'Аккаунт' },
   { id: 'audio', label: 'Аудио' },
@@ -583,6 +592,12 @@ async function loadMore() {
 }
 
 // === Настройки ===
+async function copyToken() {
+  await navigator.clipboard.writeText(auth.accessToken)
+  tokenCopied.value = true
+  setTimeout(() => { tokenCopied.value = false }, 2000)
+}
+
 async function openSettings() {
   showSettings.value = true
   activeSettingsTab.value = 'account'
@@ -768,6 +783,11 @@ function logout() { auth.logout(); router.push('/login') }
   font-weight: 600; font-size: 13px; align-self: flex-start;
 }
 .btn-danger:hover { opacity: 0.85; }
+
+.token-row { display: flex; gap: 8px; }
+.token-input { flex: 1; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text1); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+.btn-secondary { background: var(--bg-hover); border: 1px solid var(--border); border-radius: 6px; color: var(--text1); padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.btn-secondary:hover { background: var(--bg-active); }
 
 .voice-mode-group {
   display: flex;
