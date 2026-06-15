@@ -1,0 +1,25 @@
+# Rust
+target/
+Cargo.lock
+
+# Env и ключи
+.env
+keys/
+livekit-keys.yaml
+
+# Tauri
+client/src-tauri/target/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

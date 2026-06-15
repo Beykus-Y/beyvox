@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: beyvox-central-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: beyvox_central
+      POSTGRES_USER: beyvox
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U beyvox -d beyvox_central"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  central:
+    build: .
+    container_name: beyvox-central
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://beyvox:${DB_PASSWORD:-changeme}@postgres:5432/beyvox_central
+      HOST: 0.0.0.0
+      PORT: 3000
+      JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private
+      JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public
+      ACCESS_TOKEN_TTL_SECS: 900
+      REFRESH_TOKEN_TTL_SECS: 2592000
+    secrets:
+      - jwt_private
+      - jwt_public
+    ports:
+      - "3000:3000"
+
+secrets:
+  jwt_private:
+    file: ./keys/private.pem
+  jwt_public:
+    file: ./keys/public.pem
+
+volumes:
+  postgres_data:

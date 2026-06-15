@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: beyvox-server-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: beyvox_server
+      POSTGRES_USER: beyvox
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"   # 5433 чтобы не конфликтовать с site если оба запущены локально
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U beyvox -d beyvox_server"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: beyvox-livekit
+    restart: unless-stopped
+    command: >
+      --key-file /etc/livekit/keys.yaml
+      --bind 0.0.0.0
+      --port 7880
+      --rtc-port-range-start 50000
+      --rtc-port-range-end 60000
+    volumes:
+      - ./livekit-keys.yaml:/etc/livekit/keys.yaml:ro
+    ports:
+      - "7880:7880"           # WebSocket API
+      - "7881:7881"           # WebRTC over TCP
+      - "50000-60000:50000-60000/udp"  # RTC UDP range
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7880/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: .
+    container_name: beyvox-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      livekit:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://beyvox:${DB_PASSWORD:-changeme}@postgres:5432/beyvox_server
+      HOST: 0.0.0.0
+      PORT: 8080
+      CENTRAL_URL: ${CENTRAL_URL:-https://beyvox.beykus.fun}
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-devsecret_at_least_32_chars_long!!}
+      CATALOG_REGISTER: ${CATALOG_REGISTER:-false}
+      SERVER_NAME: ${SERVER_NAME:-My BeyVox Server}
+      SERVER_ADDRESS: ${SERVER_ADDRESS:-localhost:8080}
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:

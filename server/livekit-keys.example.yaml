@@ -1,0 +1,3 @@
+# LiveKit API ключи — скопируй в livekit-keys.yaml и замени значения
+# Формат: apiKey: apiSecret (секрет минимум 32 символа)
+devkey: devsecret_at_least_32_chars_long!!

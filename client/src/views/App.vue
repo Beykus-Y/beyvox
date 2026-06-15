@@ -1,0 +1,526 @@
+<template>
+  <div class="app-layout">
+    <!-- Уровень 1: инстансы beyvox-server -->
+    <ServerSidebar
+      :servers="serversStore.servers"
+      :active-url="serversStore.activeUrl"
+      @select-server="switchServer"
+      @add-server="openAddServer"
+      @remove-server="serversStore.removeServer"
+      @open-settings="openSettings"
+    />
+
+    <!-- Уровень 2: список серверов (гильдий) внутри выбранного инстанса -->
+    <GuildSidebar
+      v-if="serversStore.activeUrl"
+      :server-name="serversStore.activeServer?.name || ''"
+      :guilds="guild.guilds"
+      :active-guild-id="guild.activeGuildId"
+      @select-guild="selectGuild"
+      @create-guild="openCreateGuild"
+    />
+
+    <!-- Если инстанс не выбран — заглушка вместо guild sidebar -->
+    <div v-else class="no-server">
+      <div class="no-server-hint">
+        <div class="no-server-icon">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="currentColor" opacity="0.35">
+            <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
+          </svg>
+        </div>
+        <h3>Добро пожаловать в BeyVox</h3>
+        <p>Добавь BeyVox-сервер слева</p>
+        <button class="connect-btn" @click="openAddServer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          Добавить сервер
+        </button>
+      </div>
+    </div>
+
+    <!-- Уровень 3: каналы выбранной гильдии -->
+    <ChannelSidebar
+      v-if="guild.activeGuildId"
+      :guild-name="activeGuild?.name || ''"
+      :channels="guild.channels"
+      :active-channel-id="guild.activeChannelId"
+      :active-voice-channel-id="voice.activeChannelId"
+      :username="auth.username"
+      :ws-status="wsStatusLabel"
+      :is-muted="voice.isMuted"
+      :is-deafened="voice.isDeafened"
+      :voice-states="voice.voiceStates"
+      :active-speakers="voice.activeSpeakers"
+      @select-channel="selectTextChannel"
+      @join-voice="joinVoice"
+      @toggle-mute="voice.toggleMute()"
+      @toggle-deafen="voice.toggleDeafen()"
+    />
+
+    <!-- Нет выбранной гильдии — подсказка в основной области -->
+    <div v-else-if="serversStore.activeUrl" class="no-guild-main">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
+        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+      </svg>
+      <p>Выбери или создай сервер слева</p>
+    </div>
+
+    <!-- Основная область: чат -->
+    <ChatArea
+      v-if="guild.activeChannelId"
+      :channel-name="activeChannel?.name || ''"
+      :messages="guild.messages"
+      :user-id="auth.userId"
+      :loading="messagesLoading"
+      @send="onSend"
+      @load-more="loadMore"
+    />
+
+    <div v-else-if="guild.activeGuildId" class="no-channel">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
+        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+      </svg>
+      <p>Выбери канал слева</p>
+    </div>
+
+    <!-- Модалка: добавить инстанс сервера -->
+    <div v-if="showAddServer" class="modal-overlay" @click.self="closeAddServer">
+      <div class="modal">
+        <h3>Подключиться к серверу</h3>
+        <p class="modal-hint">Адрес BeyVox-сервера</p>
+        <input v-model="serverUrlInput" placeholder="http://localhost:8080" @keydown.enter="connectServer" autofocus />
+        <p v-if="serverError" class="modal-error">{{ serverError }}</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="closeAddServer">Отмена</button>
+          <button class="btn-primary" :disabled="serverLoading || !serverUrlInput.trim()" @click="connectServer">
+            {{ serverLoading ? '...' : 'Подключиться' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Модалка: создать сервер (гильдию) -->
+    <div v-if="showCreateGuild" class="modal-overlay" @click.self="showCreateGuild = false">
+      <div class="modal">
+        <h3>Создать сервер</h3>
+        <div class="modal-field">
+          <label>Название</label>
+          <input v-model="newGuildName" placeholder="Мой сервер" @keydown.enter="createGuild" autofocus />
+        </div>
+        <div class="modal-field" v-if="serversStore.activeServer?.requiresOwnerToken">
+          <label>Токен владельца</label>
+          <input v-model="ownerToken" type="password" placeholder="из логов сервера при старте" />
+        </div>
+        <p v-if="serverError" class="modal-error">{{ serverError }}</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="showCreateGuild = false">Отмена</button>
+          <button class="btn-primary" :disabled="serverLoading || !newGuildName.trim()" @click="createGuild">
+            {{ serverLoading ? '...' : 'Создать' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Инвайт-код -->
+    <div v-if="showInvite" class="modal-overlay" @click.self="showInvite = false">
+      <div class="modal">
+        <h3>Войти по инвайту</h3>
+        <input v-model="inviteCodeInput" placeholder="abc12345" @keydown.enter="joinByInvite" autofocus />
+        <p v-if="serverError" class="modal-error">{{ serverError }}</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="showInvite = false">Отмена</button>
+          <button class="btn-primary" :disabled="serverLoading" @click="joinByInvite">
+            {{ serverLoading ? '...' : 'Войти' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Настройки -->
+    <div v-if="showSettings" class="modal-overlay" @click.self="showSettings = false">
+      <div class="modal settings-modal">
+        <div class="settings-sidebar">
+          <div
+            v-for="tab in settingsTabs" :key="tab.id"
+            class="settings-tab" :class="{ active: activeSettingsTab === tab.id }"
+            @click="activeSettingsTab = tab.id"
+          >{{ tab.label }}</div>
+        </div>
+        <div class="settings-content">
+          <button class="settings-close" @click="showSettings = false">✕</button>
+
+          <template v-if="activeSettingsTab === 'account'">
+            <h2>Аккаунт</h2>
+            <div class="settings-row">
+              <div class="settings-avatar">{{ auth.username[0]?.toUpperCase() }}</div>
+              <div>
+                <div class="settings-username">{{ auth.username }}</div>
+                <div class="settings-label">{{ auth.userId }}</div>
+              </div>
+            </div>
+            <div class="settings-divider" />
+            <button class="btn-danger" @click="logout">Выйти</button>
+          </template>
+
+          <template v-if="activeSettingsTab === 'audio'">
+            <h2>Аудио</h2>
+            <div class="settings-field">
+              <label>Микрофон</label>
+              <select v-model="selectedInput">
+                <option v-for="d in inputDevices" :key="d.id" :value="d.id">{{ d.name }}</option>
+              </select>
+            </div>
+            <div class="settings-field">
+              <label>Динамики</label>
+              <select v-model="selectedOutput">
+                <option v-for="d in outputDevices" :key="d.id" :value="d.id">{{ d.name }}</option>
+              </select>
+            </div>
+          </template>
+
+          <template v-if="activeSettingsTab === 'vst'">
+            <h2>VST плагины</h2>
+            <p class="settings-hint">Добавь .dll/.so/.vst3 для обработки микрофона</p>
+            <div class="vst-list">
+              <div v-if="vstPlugins.length === 0" class="vst-empty">Плагинов нет</div>
+              <div v-for="(vst, i) in vstPlugins" :key="i" class="vst-item">
+                <div class="vst-info">
+                  <div class="vst-name">{{ vst.name }}</div>
+                  <div class="settings-label">{{ vst.path }}</div>
+                </div>
+                <button class="btn-icon-danger" @click="removeVst(i)">✕</button>
+              </div>
+            </div>
+            <button class="btn-primary" style="margin-top:12px;align-self:flex-start" @click="addVst">+ Добавить плагин</button>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { invoke } from '@tauri-apps/api/core'
+import ServerSidebar from '../components/layout/ServerSidebar.vue'
+import GuildSidebar from '../components/layout/GuildSidebar.vue'
+import ChannelSidebar from '../components/layout/ChannelSidebar.vue'
+import ChatArea from '../components/chat/ChatArea.vue'
+import { useAuthStore } from '../stores/auth'
+import { useGuildStore } from '../stores/guild'
+import { useWsStore } from '../stores/ws'
+import { useVoiceStore } from '../stores/voice'
+import { useServersStore } from '../stores/servers'
+
+const router = useRouter()
+const auth = useAuthStore()
+const guild = useGuildStore()
+const ws = useWsStore()
+const voice = useVoiceStore()
+const serversStore = useServersStore()
+
+// Модалки
+const showAddServer = ref(false)
+const showCreateGuild = ref(false)
+const showInvite = ref(false)
+const showSettings = ref(false)
+
+// Форма добавления сервера
+const serverUrlInput = ref('')
+const serverError = ref('')
+const serverLoading = ref(false)
+
+// Форма создания сервера (гильдии)
+const newGuildName = ref('')
+const ownerToken = ref('')
+
+// Инвайт
+const inviteCodeInput = ref('')
+
+// Загрузка сообщений
+const messagesLoading = ref(false)
+
+// Settings
+const activeSettingsTab = ref('account')
+const settingsTabs = [
+  { id: 'account', label: 'Аккаунт' },
+  { id: 'audio', label: 'Аудио' },
+  { id: 'vst', label: 'VST плагины' },
+]
+interface AudioDevice { id: string; name: string }
+interface VstInfo { path: string; name: string; vendor: string; version: string; num_inputs: number; num_outputs: number }
+const vstPlugins = ref<VstInfo[]>([])
+const inputDevices = ref<AudioDevice[]>([])
+const outputDevices = ref<AudioDevice[]>([])
+const selectedInput = ref('')
+const selectedOutput = ref('')
+
+const activeGuild = computed(() => guild.guilds.find(g => g.id === guild.activeGuildId))
+const activeChannel = computed(() => guild.channels.find(c => c.id === guild.activeChannelId))
+const wsStatusLabel = computed(() => {
+  switch (ws.status) {
+    case 'connected': return '● онлайн'
+    case 'connecting': return '○ подключение...'
+    default: return '○ офлайн'
+  }
+})
+
+onMounted(() => {
+  if (!auth.isLoggedIn) { router.push('/login'); return }
+  // Если был активный сервер — переподключаемся
+  if (serversStore.activeUrl) {
+    guild.connectToServer(serversStore.activeUrl)
+    ws.connect(serversStore.activeUrl)
+  }
+})
+
+// === Переключение серверов ===
+async function switchServer(url: string) {
+  ws.disconnect()
+  guild.reset()
+  serversStore.setActive(url)
+  guild.connectToServer(url)
+  ws.connect(url)
+}
+
+// === Добавить инстанс сервера ===
+function openAddServer() {
+  serverUrlInput.value = ''
+  serverError.value = ''
+  showAddServer.value = true
+}
+
+function closeAddServer() {
+  showAddServer.value = false
+  serverError.value = ''
+}
+
+async function connectServer() {
+  const url = serverUrlInput.value.trim()
+  if (!url) return
+  serverError.value = ''
+  serverLoading.value = true
+  try {
+    const server = await serversStore.addServer(url)
+    await switchServer(server.url)
+    // Ждём READY
+    await new Promise<void>((resolve, reject) => {
+      const start = Date.now()
+      const id = setInterval(() => {
+        if (ws.status === 'connected') { clearInterval(id); resolve() }
+        if (Date.now() - start > 6000) { clearInterval(id); reject(new Error('timeout')) }
+      }, 100)
+    })
+    closeAddServer()
+  } catch {
+    serverError.value = 'Не удалось подключиться. Проверь адрес сервера.'
+    serversStore.removeServer(serverUrlInput.value.trim().replace(/\/$/, ''))
+  } finally {
+    serverLoading.value = false
+  }
+}
+
+// === Создать сервер (гильдию) ===
+function openCreateGuild() {
+  newGuildName.value = ''
+  ownerToken.value = ''
+  serverError.value = ''
+  showCreateGuild.value = true
+}
+
+async function createGuild() {
+  const name = newGuildName.value.trim()
+  if (!name) return
+  serverError.value = ''
+  serverLoading.value = true
+  try {
+    await guild.createGuild(name, ownerToken.value)
+    showCreateGuild.value = false
+  } catch (e: any) {
+    const msg = e?.response?.data?.error
+    if (e?.response?.status === 403) serverError.value = 'Неверный токен владельца'
+    else serverError.value = msg || 'Ошибка создания'
+  } finally {
+    serverLoading.value = false
+  }
+}
+
+// === Инвайт ===
+async function joinByInvite() {
+  const code = inviteCodeInput.value.trim()
+  if (!code) return
+  serverError.value = ''
+  serverLoading.value = true
+  try {
+    await guild.joinByInvite(code)
+    showInvite.value = false
+    inviteCodeInput.value = ''
+  } catch {
+    serverError.value = 'Код не найден или истёк.'
+  } finally {
+    serverLoading.value = false
+  }
+}
+
+// === Каналы и чат ===
+async function selectGuild(guildId: string) {
+  await guild.loadChannels(guildId)
+  await guild.loadMembers(guildId)
+}
+
+async function selectTextChannel(channel: any) {
+  if (channel.type !== 'text') return
+  messagesLoading.value = true
+  try { await guild.loadMessages(guild.activeGuildId!, channel.id) }
+  finally { messagesLoading.value = false }
+}
+
+function joinVoice(channel: any) {
+  if (!guild.activeGuildId) return
+  if (voice.activeChannelId === channel.id) {
+    ws.joinVoiceChannel(guild.activeGuildId, null)
+    voice.disconnect()
+  } else {
+    ws.joinVoiceChannel(guild.activeGuildId, channel.id)
+  }
+}
+
+async function onSend({ content, replyTo }: { content: string; replyTo: string | null }) {
+  if (!guild.activeGuildId || !guild.activeChannelId) return
+  await guild.sendMessage(guild.activeGuildId, guild.activeChannelId, content, replyTo ?? undefined)
+}
+
+async function loadMore() {}
+
+// === Настройки ===
+async function openSettings() {
+  showSettings.value = true
+  activeSettingsTab.value = 'account'
+  try {
+    inputDevices.value = await invoke<AudioDevice[]>('list_input_devices')
+    outputDevices.value = await invoke<AudioDevice[]>('list_output_devices')
+    if (!selectedInput.value) selectedInput.value = await invoke<string>('default_input_device').catch(() => '')
+    if (!selectedOutput.value) selectedOutput.value = await invoke<string>('default_output_device').catch(() => '')
+  } catch {}
+}
+
+async function addVst() {
+  const path = prompt('Путь до VST плагина (.dll / .so / .vst3):')
+  if (!path) return
+  try {
+    const info = await invoke<VstInfo>('load_vst_info', { path })
+    vstPlugins.value.push(info)
+  } catch (e: any) { alert('Ошибка: ' + e) }
+}
+
+function removeVst(i: number) { vstPlugins.value.splice(i, 1) }
+
+function logout() { auth.logout(); router.push('/login') }
+</script>
+
+<style scoped>
+.app-layout { height: 100%; display: flex; overflow: hidden; }
+
+.no-server, .no-guild-main, .no-channel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text3);
+  font-size: 13px;
+}
+.no-server-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.no-server-icon { color: var(--text3); }
+.no-server-hint h3 { font-size: 18px; font-weight: 700; color: var(--text); }
+.no-server-hint p { color: var(--text2); font-size: 13px; }
+.connect-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 20px;
+  background: var(--accent);
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.connect-btn:hover { background: var(--accent-hover); }
+
+/* Модалки */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+}
+.modal h3 { font-size: 16px; font-weight: 700; }
+.modal-hint { font-size: 12px; color: var(--text2); }
+.modal-field { display: flex; flex-direction: column; gap: 5px; }
+.modal-field label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+.modal-error { font-size: 12px; color: var(--red); padding: 6px 10px; background: rgba(255,85,85,0.1); border-radius: 6px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.btn-ghost { padding: 8px 16px; border-radius: 6px; background: transparent; color: var(--text2); border: 1px solid var(--border); }
+.btn-primary { padding: 8px 16px; border-radius: 6px; background: var(--accent); color: white; font-weight: 600; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Настройки */
+.settings-modal {
+  width: 740px; max-width: 95vw;
+  height: 520px; max-height: 90vh;
+  flex-direction: row; padding: 0; gap: 0; overflow: hidden;
+}
+.settings-sidebar {
+  width: 180px; background: var(--bg-darkest);
+  padding: 20px 8px; display: flex; flex-direction: column; gap: 2px; flex-shrink: 0;
+}
+.settings-tab { padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--text2); transition: all 0.1s; }
+.settings-tab:hover { background: var(--bg-hover); color: var(--text); }
+.settings-tab.active { background: var(--bg-hover); color: var(--text); font-weight: 600; }
+.settings-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; display: flex; flex-direction: column; gap: 16px; }
+.settings-content h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.settings-close { position: absolute; top: 16px; right: 16px; background: transparent; color: var(--text3); font-size: 16px; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.settings-close:hover { background: var(--bg-hover); color: var(--text); }
+.settings-row { display: flex; align-items: center; gap: 12px; }
+.settings-avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.settings-username { font-size: 16px; font-weight: 600; }
+.settings-label { font-size: 11px; color: var(--text3); }
+.settings-divider { height: 1px; background: var(--border); }
+.settings-hint { font-size: 12px; color: var(--text2); }
+.settings-field { display: flex; flex-direction: column; gap: 6px; }
+.settings-field label { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+.settings-field select { background: var(--bg-light); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 8px 12px; font-size: 14px; font-family: inherit; outline: none; }
+.settings-field select:focus { border-color: var(--accent); }
+.vst-list { display: flex; flex-direction: column; gap: 6px; }
+.vst-empty { color: var(--text3); font-size: 13px; padding: 8px 0; }
+.vst-item { display: flex; align-items: center; gap: 8px; background: var(--bg-light); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+.vst-info { flex: 1; min-width: 0; }
+.vst-name { font-size: 13px; font-weight: 600; }
+.btn-icon-danger { background: transparent; color: var(--text3); width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.btn-icon-danger:hover { background: rgba(255,85,85,0.15); color: var(--red); }
+.btn-danger { padding: 8px 16px; border-radius: 6px; background: rgba(255,85,85,0.15); color: var(--red); font-weight: 600; align-self: flex-start; }
+.btn-danger:hover { background: rgba(255,85,85,0.3); }
+</style>
