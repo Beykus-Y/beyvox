@@ -52,11 +52,16 @@
       :is-deafened="voice.isDeafened"
       :voice-states="voice.voiceStates"
       :active-speakers="voice.activeSpeakers"
+      :members="guild.members"
+      :participant-volumes="voice.participantVolumes"
+      :mentioned-channels="guild.mentionedChannels"
       :collapsed="!channelSidebarOpen"
       @select-channel="selectTextChannel"
       @join-voice="joinVoice"
       @toggle-mute="voice.toggleMute()"
       @toggle-deafen="voice.toggleDeafen()"
+      @set-volume="voice.setParticipantVolume"
+      @create-channel="openCreateChannel"
       @toggle="channelSidebarOpen = !channelSidebarOpen"
     />
 
@@ -74,9 +79,12 @@
       :channel-name="activeChannel?.name || ''"
       :messages="guild.messages"
       :user-id="auth.userId"
+      :username="auth.username"
       :loading="messagesLoading"
+      :members="guild.members"
       @send="onSend"
       @load-more="loadMore"
+      @toggle-reaction="onToggleReaction"
     />
 
     <div v-else-if="guild.activeGuildId" class="no-channel">
@@ -139,6 +147,28 @@
       </div>
     </div>
 
+    <!-- Создать канал -->
+    <div v-if="showCreateChannel" class="modal-overlay" @click.self="showCreateChannel = false">
+      <div class="modal">
+        <h3>Создать {{ newChannelType === 'text' ? 'текстовый' : 'голосовой' }} канал</h3>
+        <div class="modal-field">
+          <label>Название</label>
+          <input v-model="newChannelName" :placeholder="newChannelType === 'text' ? 'general' : 'Голос'" @keydown.enter="createChannel" autofocus />
+        </div>
+        <div v-if="newChannelType === 'voice'" class="modal-field">
+          <label>Лимит участников (0 = без лимита)</label>
+          <input v-model.number="newChannelLimit" type="number" min="0" max="99" placeholder="0" />
+        </div>
+        <p v-if="serverError" class="modal-error">{{ serverError }}</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="showCreateChannel = false">Отмена</button>
+          <button class="btn-primary" :disabled="serverLoading || !newChannelName.trim()" @click="createChannel">
+            {{ serverLoading ? '...' : 'Создать' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Настройки -->
     <div v-if="showSettings" class="modal-overlay" @click.self="showSettings = false">
       <div class="modal settings-modal">
@@ -169,17 +199,44 @@
           <template v-if="activeSettingsTab === 'audio'">
             <div class="settings-field">
               <label>Микрофон</label>
-              <select v-model="selectedInput">
+              <select v-model="voice.selectedInputId">
                 <option value="" disabled>Выбери устройство...</option>
                 <option v-for="d in inputDevices" :key="d.id" :value="d.id">{{ d.name }}</option>
               </select>
             </div>
             <div class="settings-field">
               <label>Динамики / Наушники</label>
-              <select v-model="selectedOutput">
+              <select v-model="voice.selectedOutputId">
                 <option value="" disabled>Выбери устройство...</option>
                 <option v-for="d in outputDevices" :key="d.id" :value="d.id">{{ d.name }}</option>
               </select>
+            </div>
+            <div class="settings-field">
+              <label>Режим микрофона</label>
+              <div class="voice-mode-group">
+                <label class="voice-mode-opt" :class="{ active: voice.voiceMode === 'open' }">
+                  <input type="radio" v-model="voice.voiceMode" value="open" />
+                  Открытый
+                </label>
+                <label class="voice-mode-opt" :class="{ active: voice.voiceMode === 'ptt' }">
+                  <input type="radio" v-model="voice.voiceMode" value="ptt" />
+                  Push-to-Talk
+                </label>
+                <label class="voice-mode-opt" :class="{ active: voice.voiceMode === 'vad' }">
+                  <input type="radio" v-model="voice.voiceMode" value="vad" />
+                  По голосу (VAD)
+                </label>
+              </div>
+            </div>
+            <div v-if="voice.voiceMode === 'ptt'" class="settings-field">
+              <label>Клавиша PTT</label>
+              <button class="ptt-key-btn" :class="{ recording: recordingPttKey }" @click="startRecordingPttKey">
+                {{ recordingPttKey ? 'Нажми клавишу...' : formatKeyCode(voice.pttKey) }}
+              </button>
+              <span class="settings-hint-sm">Удерживай клавишу чтобы говорить</span>
+            </div>
+            <div v-if="voice.voiceMode === 'vad'" class="settings-hint">
+              Микрофон автоматически включается при обнаружении голоса.
             </div>
           </template>
 
@@ -218,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openFile } from '@tauri-apps/plugin-dialog'
@@ -244,6 +301,10 @@ const showAddServer = ref(false)
 const showCreateGuild = ref(false)
 const showInvite = ref(false)
 const showSettings = ref(false)
+const showCreateChannel = ref(false)
+const newChannelType = ref<'text' | 'voice'>('text')
+const newChannelName = ref('')
+const newChannelLimit = ref(0)
 
 // Форма добавления сервера
 const serverUrlInput = ref('')
@@ -276,8 +337,7 @@ interface VstInfo { path: string; name: string; vendor: string; version: string;
 const vstPlugins = ref<VstInfo[]>([])
 const inputDevices = ref<AudioDevice[]>([])
 const outputDevices = ref<AudioDevice[]>([])
-const selectedInput = ref('')
-const selectedOutput = ref('')
+const recordingPttKey = ref(false)
 
 const activeGuild = computed(() => guild.guilds.find(g => g.id === guild.activeGuildId))
 const activeChannel = computed(() => guild.channels.find(c => c.id === guild.activeChannelId))
@@ -291,12 +351,57 @@ const wsStatusLabel = computed(() => {
 
 onMounted(() => {
   if (!auth.isLoggedIn) { router.push('/login'); return }
-  // Если был активный сервер — переподключаемся
   if (serversStore.activeUrl) {
     guild.connectToServer(serversStore.activeUrl)
     ws.connect(serversStore.activeUrl)
   }
+  document.addEventListener('keydown', handlePttKeyDown)
+  document.addEventListener('keyup', handlePttKeyUp)
 })
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handlePttKeyDown)
+  document.removeEventListener('keyup', handlePttKeyUp)
+})
+
+function handlePttKeyDown(e: KeyboardEvent) {
+  if (voice.voiceMode === 'ptt' && e.code === voice.pttKey && voice.activeChannelId) {
+    e.preventDefault()
+    voice.pttPress()
+  }
+}
+
+function handlePttKeyUp(e: KeyboardEvent) {
+  if (voice.voiceMode === 'ptt' && e.code === voice.pttKey) {
+    voice.pttRelease()
+  }
+}
+
+function startRecordingPttKey() {
+  recordingPttKey.value = true
+  const handler = (e: KeyboardEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    voice.pttKey = e.code
+    recordingPttKey.value = false
+    document.removeEventListener('keydown', handler, true)
+  }
+  document.addEventListener('keydown', handler, true)
+}
+
+function formatKeyCode(code: string): string {
+  const map: Record<string, string> = {
+    Space: 'Пробел',
+    ShiftLeft: 'Shift (L)', ShiftRight: 'Shift (R)',
+    ControlLeft: 'Ctrl (L)', ControlRight: 'Ctrl (R)',
+    AltLeft: 'Alt (L)', AltRight: 'Alt (R)',
+    CapsLock: 'Caps Lock',
+  }
+  if (map[code]) return map[code]
+  if (code.startsWith('Key')) return code.slice(3)
+  if (code.startsWith('Digit')) return code.slice(5)
+  return code
+}
 
 // === Переключение серверов ===
 async function switchServer(url: string) {
@@ -336,8 +441,9 @@ async function connectServer() {
       }, 100)
     })
     closeAddServer()
-  } catch {
-    serverError.value = 'Не удалось подключиться. Проверь адрес сервера.'
+  } catch (e: any) {
+    const msg = e?.message || e?.response?.data?.error || String(e)
+    serverError.value = `Ошибка: ${msg}`
     serversStore.removeServer(serverUrlInput.value.trim().replace(/\/$/, ''))
   } finally {
     serverLoading.value = false
@@ -386,6 +492,35 @@ async function joinByInvite() {
   }
 }
 
+// === Каналы — создание ===
+function openCreateChannel(type: 'text' | 'voice') {
+  newChannelType.value = type
+  newChannelName.value = ''
+  newChannelLimit.value = 0
+  serverError.value = ''
+  showCreateChannel.value = true
+}
+
+async function createChannel() {
+  const name = newChannelName.value.trim()
+  if (!name || !guild.activeGuildId) return
+  serverError.value = ''
+  serverLoading.value = true
+  try {
+    await guild.createChannel(
+      guild.activeGuildId,
+      name,
+      newChannelType.value,
+      newChannelLimit.value > 0 ? newChannelLimit.value : undefined
+    )
+    showCreateChannel.value = false
+  } catch (e: any) {
+    serverError.value = e?.response?.data?.error || 'Ошибка создания канала'
+  } finally {
+    serverLoading.value = false
+  }
+}
+
 // === Каналы и чат ===
 async function selectGuild(guildId: string) {
   await guild.loadChannels(guildId)
@@ -422,6 +557,19 @@ async function onSend({ content, replyTo }: { content: string; replyTo: string |
   await guild.sendMessage(guild.activeGuildId, guild.activeChannelId, content, replyTo ?? undefined)
 }
 
+async function onToggleReaction(messageId: string, emoji: string, alreadyReacted: boolean) {
+  if (!guild.activeGuildId || !guild.activeChannelId) return
+  try {
+    if (alreadyReacted) {
+      await guild.removeReaction(guild.activeGuildId, guild.activeChannelId, messageId, emoji)
+    } else {
+      await guild.addReaction(guild.activeGuildId, guild.activeChannelId, messageId, emoji)
+    }
+  } catch (e) {
+    console.error('reaction error:', e)
+  }
+}
+
 async function loadMore() {
   if (!guild.activeGuildId || !guild.activeChannelId || messagesLoading.value) return
   messagesLoading.value = true
@@ -441,8 +589,8 @@ async function openSettings() {
   try {
     inputDevices.value = await invoke<AudioDevice[]>('list_input_devices')
     outputDevices.value = await invoke<AudioDevice[]>('list_output_devices')
-    if (!selectedInput.value) selectedInput.value = await invoke<string>('default_input_device').catch(() => '')
-    if (!selectedOutput.value) selectedOutput.value = await invoke<string>('default_output_device').catch(() => '')
+    if (!voice.selectedInputId) voice.selectedInputId = await invoke<string>('default_input_device').catch(() => '')
+    if (!voice.selectedOutputId) voice.selectedOutputId = await invoke<string>('default_output_device').catch(() => '')
   } catch {}
 }
 
@@ -620,6 +768,47 @@ function logout() { auth.logout(); router.push('/login') }
   font-weight: 600; font-size: 13px; align-self: flex-start;
 }
 .btn-danger:hover { opacity: 0.85; }
+
+.voice-mode-group {
+  display: flex;
+  gap: 8px;
+}
+.voice-mode-opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-light);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text2);
+  transition: all 0.1s;
+  user-select: none;
+}
+.voice-mode-opt input[type="radio"] { display: none; }
+.voice-mode-opt:hover { border-color: var(--accent); color: var(--text); }
+.voice-mode-opt.active { border-color: var(--accent); background: rgba(88, 101, 242, 0.15); color: var(--text); font-weight: 600; }
+
+.ptt-key-btn {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-light);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.1s;
+  align-self: flex-start;
+}
+.ptt-key-btn:hover { border-color: var(--accent); }
+.ptt-key-btn.recording { border-color: var(--accent); background: rgba(88, 101, 242, 0.15); color: var(--accent); animation: ptt-pulse 1s ease-in-out infinite; }
+@keyframes ptt-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+.settings-hint-sm { font-size: 11px; color: var(--text2); }
 
 .btn-add-vst {
   display: flex; align-items: center; gap: 6px;

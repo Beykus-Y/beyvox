@@ -1,6 +1,5 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use serde::Serialize;
-use std::sync::{Arc, Mutex};
 
 #[derive(Serialize, Clone, Debug)]
 pub struct AudioDevice {

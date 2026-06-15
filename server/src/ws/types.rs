@@ -61,6 +61,22 @@ pub enum ServerEvent {
         channel_id: Uuid,
         guild_id: Uuid,
     },
+    /// Добавление реакции
+    ReactionAdd {
+        message_id: Uuid,
+        channel_id: Uuid,
+        guild_id: Uuid,
+        user_id: Uuid,
+        emoji: String,
+    },
+    /// Удаление реакции
+    ReactionRemove {
+        message_id: Uuid,
+        channel_id: Uuid,
+        guild_id: Uuid,
+        user_id: Uuid,
+        emoji: String,
+    },
     /// Ответ на heartbeat
     HeartbeatAck,
     /// Ошибка
@@ -122,6 +138,7 @@ pub struct MessageDto {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub edited_at: Option<chrono::DateTime<chrono::Utc>>,
     pub reply_to: Option<Uuid>,
+    pub mention_user_ids: Vec<Uuid>,
 }
 
 #[derive(Serialize, Clone, Debug)]

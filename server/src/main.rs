@@ -8,7 +8,7 @@ mod ws;
 use std::sync::Arc;
 
 use axum::{
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use dashmap::DashMap;
@@ -81,6 +81,7 @@ async fn main() -> anyhow::Result<()> {
             move || {
                 let n = name.clone();
                 async move {
+                    tracing::info!("GET /info");
                     axum::Json(serde_json::json!({
                         "name": n,
                         "version": env!("CARGO_PKG_VERSION"),
@@ -106,6 +107,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/guilds/:gid/channels/:cid/messages", post(api::messages::send_message))
         .route("/guilds/:gid/channels/:cid/messages/:mid", patch(api::messages::edit_message))
         .route("/guilds/:gid/channels/:cid/messages/:mid", delete(api::messages::delete_message))
+        // Reactions
+        .route("/guilds/:gid/channels/:cid/messages/:mid/reactions/:emoji",
+            put(api::messages::add_reaction).delete(api::messages::remove_reaction))
         // Members
         .route("/guilds/:id/members", get(api::members::list_members))
         .route("/guilds/:gid/members/:uid/kick", post(api::members::kick_member))

@@ -63,6 +63,10 @@ export const useWsStore = defineStore('ws', () => {
 
       case 'MESSAGE_CREATE':
         guild.addMessage(event.d.message)
+        // Уведомление если нас упомянули в другом канале
+        if (event.d.message.mention_user_ids?.includes(auth.userId)) {
+          guild.markMention(event.d.message.channel_id)
+        }
         break
 
       case 'MESSAGE_UPDATE':
@@ -79,6 +83,14 @@ export const useWsStore = defineStore('ws', () => {
 
       case 'CHANNEL_DELETE':
         guild.removeChannel(event.d.channel_id)
+        break
+
+      case 'REACTION_ADD':
+        guild.handleReactionAdd(event.d)
+        break
+
+      case 'REACTION_REMOVE':
+        guild.handleReactionRemove(event.d)
         break
 
       case 'VOICE_STATE_UPDATE':

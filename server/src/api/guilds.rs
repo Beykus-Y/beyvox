@@ -105,9 +105,10 @@ pub async fn create_guild(
     .await?;
 
     // Добавляем создателя как участника
-    sqlx::query("INSERT INTO members (user_id, guild_id) VALUES ($1, $2)")
+    sqlx::query("INSERT INTO members (user_id, guild_id, username) VALUES ($1, $2, $3)")
         .bind(user.user_id)
         .bind(guild_id)
+        .bind(&user.username)
         .execute(&state.db)
         .await?;
 
@@ -186,12 +187,14 @@ pub async fn join_by_invite(
         }
     }
 
-    // Добавляем участника
+    // Добавляем участника (обновляем username если уже был)
     sqlx::query(
-        "INSERT INTO members (user_id, guild_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        "INSERT INTO members (user_id, guild_id, username) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, guild_id) DO UPDATE SET username = EXCLUDED.username",
     )
     .bind(user.user_id)
     .bind(guild_id)
+    .bind(&user.username)
     .execute(&state.db)
     .await?;
 

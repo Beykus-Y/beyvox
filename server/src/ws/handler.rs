@@ -24,6 +24,7 @@ pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
 ) -> Response {
+    tracing::info!("WS connection incoming");
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
@@ -89,7 +90,8 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                     guilds,
                                 });
                             }
-                            Err(_) => {
+                            Err(e) => {
+                                tracing::error!("identify failed: {e:#}");
                                 let _ = tx.send(ServerEvent::Error {
                                     message: "authentication failed".into(),
                                 });

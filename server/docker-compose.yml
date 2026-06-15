@@ -56,6 +56,7 @@ services:
       CATALOG_REGISTER: ${CATALOG_REGISTER:-false}
       SERVER_NAME: ${SERVER_NAME:-My BeyVox Server}
       SERVER_ADDRESS: ${SERVER_ADDRESS:-localhost:8080}
+      RUST_LOG: tower_http=debug,beyvox_server=debug
     ports:
       - "8080:8080"
 

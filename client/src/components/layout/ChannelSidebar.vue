@@ -1,6 +1,5 @@
 <template>
   <div class="channel-sidebar" :class="{ collapsed }">
-    <!-- Thin strip shown when collapsed -->
     <div v-if="collapsed" class="expand-strip" @click="$emit('toggle')" title="Развернуть">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
     </div>
@@ -19,7 +18,12 @@
     <div class="channels-list">
       <!-- Текстовые каналы -->
       <div class="channel-group">
-        <div class="group-label">Текстовые каналы</div>
+        <div class="group-label">
+          <span>Текстовые каналы</span>
+          <button class="group-add-btn" @click.stop="$emit('create-channel', 'text')" title="Создать текстовый канал">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          </button>
+        </div>
         <div
           v-for="ch in textChannels"
           :key="ch.id"
@@ -29,12 +33,18 @@
         >
           <span class="ch-icon">#</span>
           <span class="ch-name">{{ ch.name }}</span>
+          <span v-if="mentionedChannels.has(ch.id)" class="mention-badge" title="Тебя упомянули">@</span>
         </div>
       </div>
 
       <!-- Голосовые каналы -->
       <div class="channel-group">
-        <div class="group-label">Голосовые каналы</div>
+        <div class="group-label">
+          <span>Голосовые каналы</span>
+          <button class="group-add-btn" @click.stop="$emit('create-channel', 'voice')" title="Создать голосовой канал">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          </button>
+        </div>
         <div
           v-for="ch in voiceChannels"
           :key="ch.id"
@@ -55,7 +65,18 @@
               class="voice-participant"
               :class="{ speaking: activeSpeakers.has(p.user_id) }"
             >
-              <div class="avatar avatar-sm">{{ p.user_id.slice(0, 1).toUpperCase() }}</div>
+              <div class="avatar avatar-sm">{{ memberName(p.user_id).slice(0, 1).toUpperCase() }}</div>
+              <div class="vp-info">
+                <span class="vp-name">{{ memberName(p.user_id) }}</span>
+                <input
+                  class="vp-volume"
+                  type="range" min="0" max="1" step="0.05"
+                  :value="getVolume(p.user_id)"
+                  @input="onVolumeChange(p.user_id, $event)"
+                  @click.stop
+                  title="Громкость"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -89,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Channel } from '../../stores/guild'
+import type { Channel, Member } from '../../stores/guild'
 import type { VoiceState } from '../../stores/voice'
 import { computed } from 'vue'
 
@@ -104,10 +125,27 @@ const props = defineProps<{
   isDeafened: boolean
   voiceStates: Map<string, VoiceState>
   activeSpeakers: Set<string>
+  members: Member[]
+  participantVolumes: Map<string, number>
+  mentionedChannels: Set<string>
   collapsed?: boolean
 }>()
 
-defineEmits(['select-channel', 'join-voice', 'toggle-mute', 'toggle-deafen', 'toggle'])
+const emit = defineEmits(['select-channel', 'join-voice', 'toggle-mute', 'toggle-deafen', 'toggle', 'set-volume', 'create-channel'])
+
+function memberName(userId: string): string {
+  const m = props.members.find((m) => m.user_id === userId)
+  return m?.nickname || m?.username || userId.slice(0, 8)
+}
+
+function getVolume(userId: string): number {
+  return props.participantVolumes.get(userId) ?? 1
+}
+
+function onVolumeChange(userId: string, e: Event) {
+  const val = parseFloat((e.target as HTMLInputElement).value)
+  emit('set-volume', userId, val)
+}
 
 const textChannels = computed(() => props.channels.filter((c) => c.type === 'text'))
 const voiceChannels = computed(() => props.channels.filter((c) => c.type === 'voice'))
@@ -178,8 +216,22 @@ function participantCount(channelId: string): number {
   letter-spacing: 0.8px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   margin: 0 8px;
 }
+.group-add-btn {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text2);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.channel-group:hover .group-add-btn { opacity: 1; }
+.group-add-btn:hover { background: var(--bg-hover); color: var(--green); }
+
 .channel-item {
   display: flex;
   align-items: center;
@@ -198,12 +250,32 @@ function participantCount(channelId: string): number {
 .ch-icon { font-size: 16px; color: var(--text2); flex-shrink: 0; }
 .ch-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .ch-limit { font-size: 11px; color: var(--text3); }
+
+.mention-badge {
+  font-size: 10px;
+  font-weight: 800;
+  color: white;
+  background: var(--red);
+  border-radius: 10px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
 .voice-participants {
   display: flex;
+  flex-direction: column;
   gap: 2px;
-  flex-wrap: wrap;
   padding: 4px 0 0 24px;
 }
+.voice-participant {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+.voice-participant:hover { background: var(--bg-hover); }
 .voice-participant .avatar-sm {
   width: 20px; height: 20px;
   font-size: 10px;
@@ -211,8 +283,51 @@ function participantCount(channelId: string): number {
   background: var(--bg-light);
   display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .voice-participant.speaking .avatar-sm { border-color: var(--green); }
+.vp-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.vp-name {
+  font-size: 12px;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.voice-participant.speaking .vp-name { color: var(--green); }
+.vp-volume {
+  width: 100%;
+  height: 3px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.voice-participant:hover .vp-volume { opacity: 1; }
+.vp-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.vp-volume::-moz-range-thumb {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
 
 .user-panel {
   height: 56px;
@@ -228,7 +343,6 @@ function participantCount(channelId: string): number {
 .user-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .user-status { font-size: 11px; color: var(--text2); margin-top: 1px; }
 .user-controls { display: flex; gap: 2px; }
-/* Иконки управления в нейтральном цвете, не зелёном */
 .icon-btn { color: var(--text2) !important; }
 .icon-btn.active { color: var(--text) !important; }
 .icon-btn.danger { color: var(--red) !important; }

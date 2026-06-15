@@ -9,6 +9,7 @@ use super::guilds::ensure_member;
 #[derive(Serialize)]
 pub struct MemberDto {
     pub user_id: Uuid,
+    pub username: String,
     pub nickname: Option<String>,
     pub joined_at: chrono::DateTime<chrono::Utc>,
     pub is_muted: bool,
@@ -27,7 +28,7 @@ pub async fn list_members(
     ensure_member(&state, user.user_id, guild_id).await?;
 
     let rows = sqlx::query(
-        "SELECT user_id, nickname, joined_at, is_muted FROM members
+        "SELECT user_id, username, nickname, joined_at, is_muted FROM members
          WHERE guild_id = $1 AND is_banned = false ORDER BY joined_at",
     )
     .bind(guild_id)
@@ -38,6 +39,7 @@ pub async fn list_members(
         rows.iter()
             .map(|r| MemberDto {
                 user_id: r.get("user_id"),
+                username: r.get("username"),
                 nickname: r.get("nickname"),
                 joined_at: r.get("joined_at"),
                 is_muted: r.get("is_muted"),

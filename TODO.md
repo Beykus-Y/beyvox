@@ -35,13 +35,12 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 - [x] `beyvox-server`: интеграция с LiveKit (создание room, выдача токенов)
 - [x] `beyvox-server`: WebSocket signaling (`VOICE_STATE_UPDATE`, `VOICE_SERVER_UPDATE`)
 - [x] `beyvox-client`: подключение к голосовому каналу через LiveKit JS SDK
-- [ ] `beyvox-client`: захват микрофона через `cpal`
-- [ ] `beyvox-client`: выбор устройств (микрофон, динамики/наушники)
-- [ ] `beyvox-client`: PTT (Push-to-Talk) — настройка клавиши
-- [ ] `beyvox-client`: VAD (Voice Activity Detection)
+- [x] `beyvox-client`: выбор устройств (микрофон, динамики/наушники)
+- [x] `beyvox-client`: PTT (Push-to-Talk) — настройка клавиши
+- [x] `beyvox-client`: VAD (Voice Activity Detection)
 - [x] `beyvox-client`: индикация говорящих участников
 - [x] `beyvox-client`: mute себя / deafen
-- [ ] `beyvox-client`: индивидуальная регулировка громкости участников
+- [x] `beyvox-client`: индивидуальная регулировка громкости участников
 - [x] `beyvox-client`: отображение участников в голосовом канале
 
 ---
@@ -52,13 +51,15 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 
 - [x] `beyvox-server`: WebSocket `MESSAGE_CREATE`, история с пагинацией
 - [x] `beyvox-server`: редактирование и удаление сообщений
-- [ ] `beyvox-server`: упоминания @пользователь и @роль
+- [x] `beyvox-server`: упоминания @пользователь (парсинг + хранение + broadcast с mention_user_ids)
 - [x] `beyvox-client`: отправка/получение сообщений в реальном времени
 - [x] `beyvox-client`: markdown рендеринг (bold, italic, code, codeblock)
 - [x] `beyvox-client`: lazy load истории при скролле вверх
 - [x] `beyvox-client`: reply на сообщение с превью
-- [ ] `beyvox-client`: реакции emoji на сообщения
-- [ ] `beyvox-client`: уведомления при упоминании
+- [x] `beyvox-client`: реакции emoji на сообщения (пикер + real-time через WS)
+- [x] `beyvox-client`: уведомления при упоминании (значок @ в списке каналов)
+- [x] `beyvox-client`: создание текстового и голосового канала через UI
+- [x] `beyvox-server`: реакции (PUT/DELETE + REACTION_ADD/REMOVE через WS)
 
 ---
 
@@ -107,6 +108,7 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 Цель: пользователь загружает VST плагин, он применяется к микрофону.
 
 - [x] `beyvox-client`: UI загрузки VST файла в настройках аудио
+- [ ] `beyvox-client`: захват микрофона через `cpal` (основа аудиопайплайна)
 - [ ] `beyvox-client`: хостинг VST2 (`.dll`/`.so`/`.dylib`) через крейт `vst`
 - [ ] `beyvox-client`: хостинг VST3 (`.vst3`) через `vst3-sys`
 - [ ] `beyvox-client`: цепочка эффектов — порядок плагинов настраивается
