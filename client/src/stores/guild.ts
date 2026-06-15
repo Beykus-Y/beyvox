@@ -106,6 +106,11 @@ export const useGuildStore = defineStore('guild', () => {
     return data
   }
 
+  async function createInvite(guildId: string): Promise<string> {
+    const { data } = await apiClient().post(`/guilds/${guildId}/invites`, {})
+    return data.code as string
+  }
+
   async function loadChannels(guildId: string) {
     const { data } = await apiClient().get(`/guilds/${guildId}/channels`)
     channels.value = data
@@ -251,7 +256,7 @@ export const useGuildStore = defineStore('guild', () => {
   return {
     guilds, activeGuildId, activeChannelId, channels, messages, members, serverUrl,
     mentionedChannels,
-    connectToServer, createGuild, createChannel, joinByInvite, reset,
+    connectToServer, createGuild, createChannel, joinByInvite, createInvite, reset,
     loadChannels, loadMessages, loadMoreMessages, sendMessage, loadMembers,
     addReaction, removeReaction,
     addMessage, updateMessage, deleteMessage, addChannel, removeChannel, setGuilds,

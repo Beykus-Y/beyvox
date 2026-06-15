@@ -20,6 +20,7 @@
       :collapsed="!guildSidebarOpen"
       @select-guild="selectGuild"
       @create-guild="openCreateGuild"
+      @invite-guild="openInviteCreate"
       @toggle="guildSidebarOpen = !guildSidebarOpen"
     />
 
@@ -139,6 +140,25 @@
           <button class="btn-ghost" @click="showInvite = false">Отмена</button>
           <button class="btn-primary" :disabled="serverLoading" @click="joinByInvite">
             {{ serverLoading ? '...' : 'Войти' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Создать инвайт -->
+    <div v-if="showCreateInvite" class="modal-overlay" @click.self="showCreateInvite = false">
+      <div class="modal">
+        <h3>Пригласить на сервер</h3>
+        <p style="color:var(--text2);font-size:13px;margin-bottom:12px">Поделись этим кодом — человек вводит его в «Войти по инвайту»</p>
+        <div v-if="createdInviteCode" class="invite-code-box">
+          <span class="invite-code">{{ createdInviteCode }}</span>
+          <button class="btn-secondary" @click="copyInviteCode">{{ inviteCopied ? 'Скопировано!' : 'Копировать' }}</button>
+        </div>
+        <p v-if="serverError" class="modal-error">{{ serverError }}</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="showCreateInvite = false">Закрыть</button>
+          <button class="btn-primary" :disabled="serverLoading" @click="createInvite">
+            {{ serverLoading ? '...' : 'Новый инвайт' }}
           </button>
         </div>
       </div>
@@ -305,6 +325,9 @@ const serversStore = useServersStore()
 const showAddServer = ref(false)
 const showCreateGuild = ref(false)
 const showInvite = ref(false)
+const showCreateInvite = ref(false)
+const createdInviteCode = ref('')
+const inviteCopied = ref(false)
 const showSettings = ref(false)
 const showCreateChannel = ref(false)
 const newChannelType = ref<'text' | 'voice'>('text')
@@ -488,6 +511,34 @@ async function createGuild() {
 }
 
 // === Инвайт ===
+async function openInviteCreate(guildId: string) {
+  createdInviteCode.value = ''
+  serverError.value = ''
+  showCreateInvite.value = true
+  await createInvite(guildId)
+}
+
+async function createInvite(guildId?: string) {
+  const id = guildId || guild.activeGuildId
+  if (!id) return
+  serverLoading.value = true
+  serverError.value = ''
+  try {
+    const code = await guild.createInvite(id)
+    createdInviteCode.value = code
+  } catch {
+    serverError.value = 'Не удалось создать инвайт'
+  } finally {
+    serverLoading.value = false
+  }
+}
+
+async function copyInviteCode() {
+  await navigator.clipboard.writeText(createdInviteCode.value)
+  inviteCopied.value = true
+  setTimeout(() => { inviteCopied.value = false }, 2000)
+}
+
 async function joinByInvite() {
   const code = inviteCodeInput.value.trim()
   if (!code) return
@@ -787,6 +838,8 @@ function logout() { auth.logout(); router.push('/login') }
 }
 .btn-danger:hover { opacity: 0.85; }
 
+.invite-code-box { display: flex; gap: 8px; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 4px; }
+.invite-code { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: 2px; }
 .token-row { display: flex; gap: 8px; }
 .token-input { flex: 1; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text1); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 .btn-secondary { background: var(--bg-hover); border: 1px solid var(--border); border-radius: 6px; color: var(--text1); padding: 6px 12px; cursor: pointer; white-space: nowrap; }

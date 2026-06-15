@@ -11,6 +11,11 @@
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
       </button>
       <span class="server-name">{{ serverName }}</span>
+      <button v-if="activeGuildId" class="create-btn" title="Пригласить" @click="$emit('invite-guild', activeGuildId)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        </svg>
+      </button>
       <button class="create-btn" title="Создать сервер" @click="$emit('create-guild')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
@@ -52,7 +57,7 @@ defineProps<{
   activeGuildId: string | null
   collapsed?: boolean
 }>()
-defineEmits(['select-guild', 'create-guild', 'toggle'])
+defineEmits(['select-guild', 'create-guild', 'invite-guild', 'toggle'])
 </script>
 
 <style scoped>
