@@ -53,6 +53,7 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_CENTRAL_URL: https://beyvox.beykus.fun
         with:
           projectPath: client
           tagName: ${{ github.ref_name }}
