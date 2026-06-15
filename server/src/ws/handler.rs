@@ -166,6 +166,13 @@ async fn identify(
     let claims = decode::<Claims>(token, &key, &validation)?.claims;
     let user_id: Uuid = claims.sub.parse()?;
 
+    // Обновляем username во всех гильдиях (исправляет пустые username от прямых DB-вставок)
+    let _ = sqlx::query("UPDATE members SET username = $1 WHERE user_id = $2")
+        .bind(&claims.username)
+        .bind(user_id)
+        .execute(&state.db)
+        .await;
+
     // Получаем гильдии пользователя
     let rows = sqlx::query(
         "SELECT g.id, g.name, g.icon_url FROM guilds g

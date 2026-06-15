@@ -22,7 +22,10 @@
               <span class="msg-time">{{ formatTime(msg.created_at) }}</span>
               <span v-if="msg.edited_at" class="msg-edited">(ред.)</span>
             </div>
-            <div v-if="msg.reply_to" class="msg-reply">↩ ответ на сообщение</div>
+            <div v-if="msg.reply_to" class="msg-reply">
+              <span class="reply-author">↩ {{ replySource(msg.reply_to)?.author_username || '...' }}</span>
+              <span class="reply-text">{{ replySource(msg.reply_to)?.content?.slice(0, 80) || 'сообщение' }}</span>
+            </div>
             <div class="msg-content" v-html="renderMarkdown(msg.content)" />
 
             <!-- Реакции -->
@@ -47,7 +50,7 @@
 
           <!-- Кнопки при наведении -->
           <div class="msg-actions" @mouseenter="hoveredMsgId = msg.id" @mouseleave="hoveredMsgId = null">
-            <button class="msg-action-btn" @click="togglePicker(msg.id)" title="Реакция">😊</button>
+            <button class="msg-action-btn" @click.stop="togglePicker(msg.id)" title="Реакция">😊</button>
             <button class="msg-action-btn" @click="replyTo = msg.id" title="Ответить">↩</button>
           </div>
         </div>
@@ -289,6 +292,10 @@ function closePicker(_e: MouseEvent) {
 onMounted(() => document.addEventListener('click', closePicker))
 onUnmounted(() => document.removeEventListener('click', closePicker))
 
+function replySource(id: string) {
+  return props.messages.find(m => m.id === id)
+}
+
 function isMentioned(msg: Message): boolean {
   return msg.mention_user_ids?.includes(props.userId) ?? false
 }
@@ -364,7 +371,9 @@ function renderMarkdown(text: string): string {
 .message.own .msg-author { color: var(--accent); }
 .msg-time { font-size: 11px; color: var(--text3); }
 .msg-edited { font-size: 11px; color: var(--text3); }
-.msg-reply { font-size: 12px; color: var(--text3); margin-bottom: 2px; }
+.msg-reply { font-size: 12px; color: var(--text3); margin-bottom: 2px; display: flex; gap: 6px; align-items: baseline; overflow: hidden; }
+.reply-author { font-weight: 600; flex-shrink: 0; }
+.reply-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg-content {
   font-size: 14px;
   line-height: 1.5;
@@ -434,7 +443,7 @@ function renderMarkdown(text: string): string {
 /* Кнопки при наведении */
 .msg-actions {
   position: absolute;
-  top: -14px;
+  top: 4px;
   right: 8px;
   display: none;
   background: var(--bg-dark);

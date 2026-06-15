@@ -157,7 +157,7 @@
         <p v-if="serverError" class="modal-error">{{ serverError }}</p>
         <div class="modal-actions">
           <button class="btn-ghost" @click="showCreateInvite = false">Закрыть</button>
-          <button class="btn-primary" :disabled="serverLoading" @click="createInvite">
+          <button class="btn-primary" :disabled="serverLoading" @click="() => createInvite()">
             {{ serverLoading ? '...' : 'Новый инвайт' }}
           </button>
         </div>
