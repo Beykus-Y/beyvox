@@ -21,6 +21,7 @@
       @select-guild="selectGuild"
       @create-guild="openCreateGuild"
       @invite-guild="openInviteCreate"
+      @join-invite="showInvite = true"
       @toggle="guildSidebarOpen = !guildSidebarOpen"
     />
 
