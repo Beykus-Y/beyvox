@@ -4,6 +4,30 @@ mod vst;
 #[cfg(debug_assertions)]
 use tauri::Manager;
 
+#[cfg(target_os = "windows")]
+fn grant_media_permissions(app: &tauri::App) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::*;
+    use windows::Win32::Foundation::BOOL;
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.with_webview(|webview| {
+            unsafe {
+                let core = webview.inner();
+                if let Ok(handler) = webview2_com::PermissionRequestedEventHandler::create(
+                    Box::new(|_, args: Option<ICoreWebView2PermissionRequestedEventArgs>| {
+                        if let Some(args) = args {
+                            let _ = args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW);
+                            let _ = args.put_Handled(BOOL(1));
+                        }
+                        Ok(())
+                    }),
+                ) {
+                    let _ = core.add_PermissionRequested(&handler);
+                }
+            }
+        });
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -15,7 +39,8 @@ pub fn run() {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
-            #[cfg(not(debug_assertions))]
+            #[cfg(target_os = "windows")]
+            grant_media_permissions(app);
             let _ = app;
             Ok(())
         })

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, shallowRef } from 'vue'
 import { Room, RoomEvent, RemoteAudioTrack } from 'livekit-client'
 
 export type VoiceMode = 'open' | 'ptt' | 'vad'
@@ -13,7 +13,7 @@ export interface VoiceState {
 }
 
 export const useVoiceStore = defineStore('voice', () => {
-  const room = ref<Room | null>(null)
+  const room = shallowRef<Room | null>(null)
   const activeChannelId = ref<string | null>(null)
   const isMuted = ref(false)
   const isDeafened = ref(false)
@@ -123,7 +123,7 @@ export const useVoiceStore = defineStore('voice', () => {
     try {
       vadStream = await navigator.mediaDevices.getUserMedia({
         audio: selectedInputId.value
-          ? { deviceId: { exact: selectedInputId.value } }
+          ? { deviceId: selectedInputId.value }
           : true,
       })
       vadContext = new AudioContext()

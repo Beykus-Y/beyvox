@@ -29,3 +29,7 @@ anyhow = "1"
 cpal = "0.15"
 directories = "5"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+webview2-com = "0.34"
+windows = { version = "0.58", features = ["Win32_Foundation"] }
+
