@@ -1,6 +1,7 @@
 mod audio;
 mod vst;
 
+#[cfg(debug_assertions)]
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -14,6 +15,8 @@ pub fn run() {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
+            #[cfg(not(debug_assertions))]
+            let _ = app;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -56,7 +56,7 @@ impl Config {
             smtp_host: std::env::var("SMTP_HOST").unwrap_or_else(|_| "smtp.beget.com".into()),
             smtp_port: std::env::var("SMTP_PORT").unwrap_or_else(|_| "465".into()).parse()?,
             smtp_username: std::env::var("SMTP_USERNAME").unwrap_or_else(|_| "noreply@beykus.fun".into()),
-            smtp_password: std::env::var("SMTP_PASSWORD").unwrap_or_else(|_| "No-replypassword2026".into()),
+            smtp_password: std::env::var("SMTP_PASSWORD").unwrap_or_default(),
             smtp_from: std::env::var("SMTP_FROM").unwrap_or_else(|_| "BeyVox <noreply@beykus.fun>".into()),
             central_public_url: std::env::var("CENTRAL_PUBLIC_URL").unwrap_or_else(|_| "https://beyvox.beykus.fun".into()),
         })

@@ -11,6 +11,7 @@ pub struct VstPluginInfo {
     pub num_outputs: i32,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VstPluginState {
     pub path: String,
