@@ -8,22 +8,22 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 
 Цель: рабочая авторизация и каталог серверов.
 
-- [ ] Инициализировать репозитории (`beyvox-server`, `beyvox-central`, `beyvox-client`, `beyvox-proto`)
-- [ ] `beyvox-central`: регистрация пользователя (login + email + password)
-- [ ] `beyvox-central`: логин, выдача JWT access + refresh токенов
-- [ ] `beyvox-central`: refresh rotation endpoint
-- [ ] `beyvox-central`: JWKS endpoint (`/.well-known/jwks.json`)
-- [ ] `beyvox-central`: API каталога серверов (регистрация, листинг, пинг живости)
-- [ ] `beyvox-server`: скелет Axum сервера, подключение PostgreSQL, миграции
-- [ ] `beyvox-server`: верификация JWT через JWKS (с кэшированием ключа)
-- [ ] `beyvox-server`: создание сервера (сообщества), инвайт-ссылки
-- [ ] `beyvox-server`: создание каналов (текстовых и голосовых)
-- [ ] `beyvox-server`: базовая система ролей (ADMINISTRATOR, MANAGE_CHANNELS, etc.)
-- [ ] `beyvox-client`: скелет Tauri + Vue 3 + Vite проекта
-- [ ] `beyvox-client`: экран логина / регистрации
-- [ ] `beyvox-client`: главный layout (сайдбар серверов, список каналов, основная область)
+- [x] Инициализировать репозитории (`beyvox-server`, `beyvox-central`, `beyvox-client`, `beyvox-proto`)
+- [x] `beyvox-central`: регистрация пользователя (login + email + password)
+- [x] `beyvox-central`: логин, выдача JWT access + refresh токенов
+- [x] `beyvox-central`: refresh rotation endpoint
+- [x] `beyvox-central`: JWKS endpoint (`/.well-known/jwks.json`)
+- [x] `beyvox-central`: API каталога серверов (регистрация, листинг, пинг живости)
+- [x] `beyvox-server`: скелет Axum сервера, подключение PostgreSQL, миграции
+- [x] `beyvox-server`: верификация JWT через JWKS (с кэшированием ключа)
+- [x] `beyvox-server`: создание сервера (сообщества), инвайт-ссылки
+- [x] `beyvox-server`: создание каналов (текстовых и голосовых)
+- [x] `beyvox-server`: базовая система ролей (ADMINISTRATOR, MANAGE_CHANNELS, etc.)
+- [x] `beyvox-client`: скелет Tauri + Vue 3 + Vite проекта
+- [x] `beyvox-client`: экран логина / регистрации
+- [x] `beyvox-client`: главный layout (сайдбар серверов, список каналов, основная область)
 - [ ] `beyvox-client`: просмотр каталога публичных серверов
-- [ ] `beyvox-client`: подключение к серверу по прямому IP/домену
+- [x] `beyvox-client`: подключение к серверу по прямому IP/домену
 
 ---
 
@@ -31,18 +31,18 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 
 Цель: можно зайти в голосовой канал и поговорить.
 
-- [ ] Развернуть LiveKit сервер (Docker)
-- [ ] `beyvox-server`: интеграция с LiveKit (создание room, выдача токенов)
-- [ ] `beyvox-server`: WebSocket signaling (`VOICE_STATE_UPDATE`, `VOICE_SERVER_UPDATE`)
-- [ ] `beyvox-client`: подключение к голосовому каналу через LiveKit Rust SDK
+- [x] Развернуть LiveKit сервер (Docker)
+- [x] `beyvox-server`: интеграция с LiveKit (создание room, выдача токенов)
+- [x] `beyvox-server`: WebSocket signaling (`VOICE_STATE_UPDATE`, `VOICE_SERVER_UPDATE`)
+- [x] `beyvox-client`: подключение к голосовому каналу через LiveKit JS SDK
 - [ ] `beyvox-client`: захват микрофона через `cpal`
 - [ ] `beyvox-client`: выбор устройств (микрофон, динамики/наушники)
 - [ ] `beyvox-client`: PTT (Push-to-Talk) — настройка клавиши
 - [ ] `beyvox-client`: VAD (Voice Activity Detection)
-- [ ] `beyvox-client`: индикация говорящих участников
-- [ ] `beyvox-client`: mute себя / deafen
+- [x] `beyvox-client`: индикация говорящих участников
+- [x] `beyvox-client`: mute себя / deafen
 - [ ] `beyvox-client`: индивидуальная регулировка громкости участников
-- [ ] `beyvox-client`: отображение участников в голосовом канале
+- [x] `beyvox-client`: отображение участников в голосовом канале
 
 ---
 
@@ -50,13 +50,13 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 
 Цель: полноценный текстовый чат внутри серверов.
 
-- [ ] `beyvox-server`: WebSocket `MESSAGE_CREATE`, история с пагинацией
-- [ ] `beyvox-server`: редактирование и удаление сообщений
+- [x] `beyvox-server`: WebSocket `MESSAGE_CREATE`, история с пагинацией
+- [x] `beyvox-server`: редактирование и удаление сообщений
 - [ ] `beyvox-server`: упоминания @пользователь и @роль
-- [ ] `beyvox-client`: отправка/получение сообщений в реальном времени
-- [ ] `beyvox-client`: markdown рендеринг (bold, italic, code, codeblock)
-- [ ] `beyvox-client`: lazy load истории при скролле вверх
-- [ ] `beyvox-client`: reply на сообщение с превью
+- [x] `beyvox-client`: отправка/получение сообщений в реальном времени
+- [x] `beyvox-client`: markdown рендеринг (bold, italic, code, codeblock)
+- [x] `beyvox-client`: lazy load истории при скролле вверх
+- [x] `beyvox-client`: reply на сообщение с превью
 - [ ] `beyvox-client`: реакции emoji на сообщения
 - [ ] `beyvox-client`: уведомления при упоминании
 
@@ -106,7 +106,7 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 
 Цель: пользователь загружает VST плагин, он применяется к микрофону.
 
-- [ ] `beyvox-client`: UI загрузки VST файла в настройках аудио
+- [x] `beyvox-client`: UI загрузки VST файла в настройках аудио
 - [ ] `beyvox-client`: хостинг VST2 (`.dll`/`.so`/`.dylib`) через крейт `vst`
 - [ ] `beyvox-client`: хостинг VST3 (`.vst3`) через `vst3-sys`
 - [ ] `beyvox-client`: цепочка эффектов — порядок плагинов настраивается
@@ -123,7 +123,7 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 - [ ] Десктопные уведомления (упоминания, входящие сообщения)
 - [ ] Статус пользователя: онлайн / не беспокоить / отошёл / невидимый
 - [ ] Смена аватара, username, пароля
-- [ ] Автоматическое переподключение (exponential backoff)
+- [x] Автоматическое переподключение (exponential backoff)
 - [ ] Offline режим: чтение истории из SQLite кэша
 - [ ] Rate limiting на API (брутфорс, спам)
 - [ ] Опциональное шумоподавление через RNNoise

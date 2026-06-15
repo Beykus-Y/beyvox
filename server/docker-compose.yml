@@ -22,17 +22,14 @@ services:
     container_name: beyvox-livekit
     restart: unless-stopped
     command: >
-      --key-file /etc/livekit/keys.yaml
       --bind 0.0.0.0
       --port 7880
-      --rtc-port-range-start 50000
-      --rtc-port-range-end 60000
-    volumes:
-      - ./livekit-keys.yaml:/etc/livekit/keys.yaml:ro
+      --udp-port 7882
+      --keys "devkey: devsecret_at_least_32_chars_long!!"
     ports:
       - "7880:7880"           # WebSocket API
       - "7881:7881"           # WebRTC over TCP
-      - "50000-60000:50000-60000/udp"  # RTC UDP range
+      - "7882:7882/udp"       # WebRTC UDP Mux
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:7880/"]
       interval: 10s
