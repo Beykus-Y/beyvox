@@ -7,6 +7,7 @@
       @select-server="switchServer"
       @add-server="openAddServer"
       @remove-server="serversStore.removeServer"
+      @disconnect-server="disconnectServer"
       @open-settings="openSettings"
     />
 
@@ -117,10 +118,6 @@
         <div class="modal-field">
           <label>Название</label>
           <input v-model="newGuildName" placeholder="Мой сервер" @keydown.enter="createGuild" autofocus />
-        </div>
-        <div class="modal-field" v-if="serversStore.activeServer?.requiresOwnerToken">
-          <label>Токен владельца</label>
-          <input v-model="ownerToken" type="password" placeholder="из логов сервера при старте" />
         </div>
         <p v-if="serverError" class="modal-error">{{ serverError }}</p>
         <div class="modal-actions">
@@ -321,7 +318,6 @@ const serverLoading = ref(false)
 
 // Форма создания сервера (гильдии)
 const newGuildName = ref('')
-const ownerToken = ref('')
 
 // Инвайт
 const inviteCodeInput = ref('')
@@ -421,6 +417,14 @@ async function switchServer(url: string) {
   ws.connect(url)
 }
 
+function disconnectServer(url: string) {
+  if (serversStore.activeUrl === url) {
+    ws.disconnect()
+    guild.reset()
+    serversStore.setActive(null)
+  }
+}
+
 // === Добавить инстанс сервера ===
 function openAddServer() {
   serverUrlInput.value = ''
@@ -462,7 +466,6 @@ async function connectServer() {
 // === Создать сервер (гильдию) ===
 function openCreateGuild() {
   newGuildName.value = ''
-  ownerToken.value = ''
   serverError.value = ''
   showCreateGuild.value = true
 }
@@ -473,11 +476,11 @@ async function createGuild() {
   serverError.value = ''
   serverLoading.value = true
   try {
-    await guild.createGuild(name, ownerToken.value)
+    await guild.createGuild(name)
     showCreateGuild.value = false
   } catch (e: any) {
     const msg = e?.response?.data?.error
-    if (e?.response?.status === 403) serverError.value = 'Неверный токен владельца'
+    if (e?.response?.status === 403) serverError.value = 'Нет прав на создание серверов'
     else serverError.value = msg || 'Ошибка создания'
   } finally {
     serverLoading.value = false

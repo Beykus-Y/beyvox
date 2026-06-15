@@ -19,7 +19,6 @@ pub struct GuildDto {
 pub struct CreateGuildRequest {
     pub name: String,
     pub description: Option<String>,
-    pub owner_token: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -72,9 +71,7 @@ pub async fn create_guild(
     user: AuthUser,
     Json(body): Json<CreateGuildRequest>,
 ) -> AppResult<Json<GuildDto>> {
-    // Проверяем owner token
-    let provided = body.owner_token.as_deref().unwrap_or("").trim().to_string();
-    if provided != state.config.owner_token {
+    if !state.config.owner_username.is_empty() && user.username != state.config.owner_username {
         return Err(AppError::Forbidden);
     }
 

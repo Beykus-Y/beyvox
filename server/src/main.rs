@@ -67,8 +67,11 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("══════════════════════════════════════");
     tracing::info!("  Server name: {}", config.server_name);
-    tracing::info!("  OWNER TOKEN: {}", config.owner_token);
-    tracing::info!("  (нужен для создания серверов внутри)");
+    if config.owner_username.is_empty() {
+        tracing::info!("  OWNER: (any user can create guilds)");
+    } else {
+        tracing::info!("  OWNER: @{}", config.owner_username);
+    }
     tracing::info!("══════════════════════════════════════");
 
     let info_name = config.server_name.clone();

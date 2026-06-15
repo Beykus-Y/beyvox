@@ -42,35 +42,41 @@ export const useVoiceStore = defineStore('voice', () => {
   const VAD_SILENCE_MS = 400
 
   async function connectToLiveKit(url: string, token: string) {
-    if (room.value) await room.value.disconnect()
+    try {
+      if (room.value) await room.value.disconnect()
 
-    const newRoom = new Room({ adaptiveStream: true, dynacast: true })
+      const newRoom = new Room({ adaptiveStream: true, dynacast: true })
 
-    newRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-      activeSpeakers.value = new Set(speakers.map((s) => s.identity))
-    })
+      newRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+        activeSpeakers.value = new Set(speakers.map((s) => s.identity))
+      })
 
-    newRoom.on(RoomEvent.Disconnected, () => {
+      newRoom.on(RoomEvent.Disconnected, () => {
+        activeChannelId.value = null
+        stopVad()
+        pttActive.value = false
+      })
+
+      console.log('[voice] connecting to LiveKit:', url)
+      await newRoom.connect(url, token)
+      console.log('[voice] connected to LiveKit room:', newRoom.name)
+
+      const micOpts = selectedInputId.value ? { deviceId: selectedInputId.value } : undefined
+
+      if (voiceMode.value === 'open') {
+        isMuted.value = false
+        await newRoom.localParticipant.setMicrophoneEnabled(true, micOpts)
+      } else {
+        isMuted.value = true
+        await newRoom.localParticipant.setMicrophoneEnabled(false, micOpts)
+        if (voiceMode.value === 'vad') startVad()
+      }
+
+      room.value = newRoom
+    } catch (e) {
+      console.error('[voice] LiveKit connection failed:', e)
       activeChannelId.value = null
-      stopVad()
-      pttActive.value = false
-    })
-
-    await newRoom.connect(url, token)
-
-    const micOpts = selectedInputId.value ? { deviceId: selectedInputId.value } : undefined
-
-    if (voiceMode.value === 'open') {
-      isMuted.value = false
-      await newRoom.localParticipant.setMicrophoneEnabled(true, micOpts)
-    } else {
-      // PTT и VAD стартуют замьюченными
-      isMuted.value = true
-      await newRoom.localParticipant.setMicrophoneEnabled(false, micOpts)
-      if (voiceMode.value === 'vad') startVad()
     }
-
-    room.value = newRoom
   }
 
   async function disconnect() {

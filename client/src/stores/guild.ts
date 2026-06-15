@@ -75,8 +75,8 @@ export const useGuildStore = defineStore('guild', () => {
     localStorage.setItem('server_url', serverUrl.value)
   }
 
-  async function createGuild(name: string, ownerToken?: string) {
-    const { data } = await apiClient().post('/guilds', { name, owner_token: ownerToken || undefined })
+  async function createGuild(name: string) {
+    const { data } = await apiClient().post('/guilds', { name })
     guilds.value.push(data)
     return data as Guild
   }
