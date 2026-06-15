@@ -113,38 +113,45 @@ function participantCount(channelId: string): number {
 <style scoped>
 .channel-sidebar {
   width: var(--sidebar-w);
-  background: var(--bg-dark);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  border-right: 1px solid var(--border);
 }
 .guild-header {
   height: 48px;
-  padding: 0 16px;
+  padding: 0 12px 0 16px;
   display: flex;
   align-items: center;
+  gap: 4px;
   border-bottom: 1px solid var(--border);
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
 }
-.guild-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guild-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .channels-list { flex: 1; overflow-y: auto; padding: 8px 0; }
-.channel-group { margin-bottom: 8px; }
+.channel-group { margin-bottom: 4px; }
 .group-label {
-  padding: 6px 16px 4px;
+  padding: 16px 8px 4px 8px;
   font-size: 11px;
-  font-weight: 600;
-  color: var(--text3);
+  font-weight: 700;
+  color: var(--text2);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
+  display: flex;
+  align-items: center;
+  margin: 0 8px;
 }
 .channel-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 8px 5px 16px;
+  padding: 5px 8px 5px 12px;
   border-radius: 6px;
-  margin: 1px 8px;
+  margin: 1px 6px;
   cursor: pointer;
   color: var(--text2);
   transition: all 0.1s;
@@ -153,15 +160,14 @@ function participantCount(channelId: string): number {
   background: var(--bg-hover);
   color: var(--text);
 }
-.ch-icon { font-size: 16px; color: var(--text3); flex-shrink: 0; }
+.ch-icon { font-size: 16px; color: var(--text2); flex-shrink: 0; }
 .ch-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .ch-limit { font-size: 11px; color: var(--text3); }
 .voice-participants {
   display: flex;
   gap: 2px;
-  margin-left: 4px;
   flex-wrap: wrap;
-  padding: 4px 0 0 22px;
+  padding: 4px 0 0 24px;
 }
 .voice-participant .avatar-sm {
   width: 20px; height: 20px;
@@ -174,16 +180,21 @@ function participantCount(channelId: string): number {
 .voice-participant.speaking .avatar-sm { border-color: var(--green); }
 
 .user-panel {
-  height: 52px;
-  padding: 0 8px;
+  height: 56px;
+  padding: 0 10px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: var(--bg-darkest);
   border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .user-info { flex: 1; min-width: 0; }
 .user-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.user-status { font-size: 11px; color: var(--text3); }
+.user-status { font-size: 11px; color: var(--text2); margin-top: 1px; }
 .user-controls { display: flex; gap: 2px; }
+/* Иконки управления в нейтральном цвете, не зелёном */
+.icon-btn { color: var(--text2) !important; }
+.icon-btn.active { color: var(--text) !important; }
+.icon-btn.danger { color: var(--red) !important; }
 </style>

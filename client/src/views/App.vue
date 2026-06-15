@@ -146,51 +146,66 @@
           >{{ tab.label }}</div>
         </div>
         <div class="settings-content">
-          <button class="settings-close" @click="showSettings = false">✕</button>
+          <button class="settings-close" @click="showSettings = false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
 
           <template v-if="activeSettingsTab === 'account'">
-            <h2>Аккаунт</h2>
             <div class="settings-row">
               <div class="settings-avatar">{{ auth.username[0]?.toUpperCase() }}</div>
-              <div>
+              <div class="settings-userinfo">
                 <div class="settings-username">{{ auth.username }}</div>
-                <div class="settings-label">{{ auth.userId }}</div>
+                <div class="settings-uuid">{{ auth.userId }}</div>
               </div>
             </div>
             <div class="settings-divider" />
-            <button class="btn-danger" @click="logout">Выйти</button>
+            <button class="btn-danger" @click="logout">Выйти из аккаунта</button>
           </template>
 
           <template v-if="activeSettingsTab === 'audio'">
-            <h2>Аудио</h2>
             <div class="settings-field">
               <label>Микрофон</label>
               <select v-model="selectedInput">
+                <option value="" disabled>Выбери устройство...</option>
                 <option v-for="d in inputDevices" :key="d.id" :value="d.id">{{ d.name }}</option>
               </select>
             </div>
             <div class="settings-field">
-              <label>Динамики</label>
+              <label>Динамики / Наушники</label>
               <select v-model="selectedOutput">
+                <option value="" disabled>Выбери устройство...</option>
                 <option v-for="d in outputDevices" :key="d.id" :value="d.id">{{ d.name }}</option>
               </select>
             </div>
           </template>
 
           <template v-if="activeSettingsTab === 'vst'">
-            <h2>VST плагины</h2>
-            <p class="settings-hint">Добавь .dll/.so/.vst3 для обработки микрофона</p>
+            <p class="settings-hint">VST плагины обрабатывают твой микрофон перед отправкой. Поддерживаются .dll, .so, .vst3</p>
             <div class="vst-list">
-              <div v-if="vstPlugins.length === 0" class="vst-empty">Плагинов нет</div>
+              <div v-if="vstPlugins.length === 0" class="vst-empty">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" opacity="0.4">
+                  <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6zm-2 16a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/>
+                </svg>
+                <span>Плагины не добавлены</span>
+              </div>
               <div v-for="(vst, i) in vstPlugins" :key="i" class="vst-item">
+                <div class="vst-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/>
+                  </svg>
+                </div>
                 <div class="vst-info">
                   <div class="vst-name">{{ vst.name }}</div>
-                  <div class="settings-label">{{ vst.path }}</div>
+                  <div class="vst-path">{{ vst.path }}</div>
                 </div>
-                <button class="btn-icon-danger" @click="removeVst(i)">✕</button>
+                <button class="btn-icon-danger" @click="removeVst(i)" title="Удалить">✕</button>
               </div>
             </div>
-            <button class="btn-primary" style="margin-top:12px;align-self:flex-start" @click="addVst">+ Добавить плагин</button>
+            <p v-if="vstError" class="modal-error" style="margin-top:4px">{{ vstError }}</p>
+            <button class="btn-add-vst" @click="addVst">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              Добавить плагин
+            </button>
           </template>
         </div>
       </div>
@@ -202,6 +217,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
+import { open as openFile } from '@tauri-apps/plugin-dialog'
 import ServerSidebar from '../components/layout/ServerSidebar.vue'
 import GuildSidebar from '../components/layout/GuildSidebar.vue'
 import ChannelSidebar from '../components/layout/ChannelSidebar.vue'
@@ -405,13 +421,20 @@ async function openSettings() {
 }
 
 async function addVst() {
-  const path = prompt('Путь до VST плагина (.dll / .so / .vst3):')
-  if (!path) return
+  const path = await openFile({
+    title: 'Выбери VST плагин',
+    filters: [{ name: 'VST Plugin', extensions: ['dll', 'so', 'vst3'] }],
+    multiple: false,
+  })
+  if (!path || typeof path !== 'string') return
   try {
     const info = await invoke<VstInfo>('load_vst_info', { path })
     vstPlugins.value.push(info)
-  } catch (e: any) { alert('Ошибка: ' + e) }
+  } catch (e: any) {
+    vstError.value = 'Не удалось загрузить плагин: ' + String(e)
+  }
 }
+const vstError = ref('')
 
 function removeVst(i: number) { vstPlugins.value.splice(i, 1) }
 
@@ -502,25 +525,82 @@ function logout() { auth.logout(); router.push('/login') }
 .settings-tab.active { background: var(--bg-hover); color: var(--text); font-weight: 600; }
 .settings-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; display: flex; flex-direction: column; gap: 16px; }
 .settings-content h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-.settings-close { position: absolute; top: 16px; right: 16px; background: transparent; color: var(--text3); font-size: 16px; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.settings-close {
+  position: absolute; top: 16px; right: 16px;
+  background: transparent; color: var(--text2);
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
 .settings-close:hover { background: var(--bg-hover); color: var(--text); }
-.settings-row { display: flex; align-items: center; gap: 12px; }
-.settings-avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: #fff; flex-shrink: 0; }
-.settings-username { font-size: 16px; font-weight: 600; }
-.settings-label { font-size: 11px; color: var(--text3); }
+
+.settings-row { display: flex; align-items: center; gap: 14px; }
+.settings-avatar {
+  width: 54px; height: 54px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #7c6cf7);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.settings-userinfo { display: flex; flex-direction: column; gap: 3px; }
+.settings-username { font-size: 16px; font-weight: 700; color: var(--text); }
+.settings-uuid { font-size: 11px; color: var(--text2); font-family: 'JetBrains Mono', monospace; }
+
 .settings-divider { height: 1px; background: var(--border); }
-.settings-hint { font-size: 12px; color: var(--text2); }
-.settings-field { display: flex; flex-direction: column; gap: 6px; }
-.settings-field label { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
-.settings-field select { background: var(--bg-light); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 8px 12px; font-size: 14px; font-family: inherit; outline: none; }
+.settings-hint { font-size: 13px; color: var(--text2); line-height: 1.5; }
+
+.settings-field { display: flex; flex-direction: column; gap: 7px; }
+.settings-field label {
+  font-size: 11px; font-weight: 700; color: var(--text2);
+  text-transform: uppercase; letter-spacing: 0.8px;
+}
+.settings-field select {
+  background: var(--bg-light); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text);
+  padding: 10px 14px; font-size: 14px; font-family: inherit; outline: none;
+  cursor: pointer;
+}
 .settings-field select:focus { border-color: var(--accent); }
-.vst-list { display: flex; flex-direction: column; gap: 6px; }
-.vst-empty { color: var(--text3); font-size: 13px; padding: 8px 0; }
-.vst-item { display: flex; align-items: center; gap: 8px; background: var(--bg-light); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+.settings-field select option { background: var(--bg-dark); }
+
+.vst-list { display: flex; flex-direction: column; gap: 6px; min-height: 60px; }
+.vst-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 24px; color: var(--text2); font-size: 13px;
+  border: 1px dashed var(--border); border-radius: var(--radius); text-align: center;
+}
+.vst-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-light); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px;
+}
+.vst-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--bg-hover); display: flex; align-items: center; justify-content: center;
+  color: var(--accent); flex-shrink: 0;
+}
 .vst-info { flex: 1; min-width: 0; }
-.vst-name { font-size: 13px; font-weight: 600; }
-.btn-icon-danger { background: transparent; color: var(--text3); width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.vst-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.vst-path { font-size: 11px; color: var(--text2); font-family: 'JetBrains Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+
+.btn-icon-danger {
+  background: transparent; color: var(--text2);
+  width: 28px; height: 28px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
 .btn-icon-danger:hover { background: rgba(255,85,85,0.15); color: var(--red); }
-.btn-danger { padding: 8px 16px; border-radius: 6px; background: rgba(255,85,85,0.15); color: var(--red); font-weight: 600; align-self: flex-start; }
-.btn-danger:hover { background: rgba(255,85,85,0.3); }
+
+.btn-danger {
+  padding: 10px 18px; border-radius: 6px;
+  background: var(--red); color: #fff;
+  font-weight: 600; font-size: 13px; align-self: flex-start;
+}
+.btn-danger:hover { opacity: 0.85; }
+
+.btn-add-vst {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 6px;
+  background: var(--bg-light); border: 1px solid var(--border);
+  color: var(--text); font-size: 13px; font-weight: 600;
+  align-self: flex-start; cursor: pointer;
+}
+.btn-add-vst:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent); }
 </style>
