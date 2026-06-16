@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef } from 'vue'
-import { Room, RoomEvent, RemoteAudioTrack } from 'livekit-client'
+import { ref } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { useAuthStore } from './auth'
 
-export type VoiceMode = 'open' | 'ptt' | 'vad'
+export type VoiceMode = 'open' | 'ptt'
 
 export interface VoiceState {
   user_id: string
@@ -14,187 +15,110 @@ export interface VoiceState {
 }
 
 export const useVoiceStore = defineStore('voice', () => {
-  const room = shallowRef<Room | null>(null)
   const activeChannelId = ref<string | null>(null)
   const isMuted = ref(false)
   const isDeafened = ref(false)
   const voiceStates = ref<Map<string, VoiceState>>(new Map())
   const activeSpeakers = ref<Set<string>>(new Set())
 
-  // Audio devices (по имени устройства из cpal)
-  const selectedInputId = ref('')
-  const selectedOutputId = ref('')
+  const selectedInputCpalName = ref('')  // cpal device name для микрофона
+  const selectedOutputCpalName = ref('') // cpal device name для динамиков
 
-  // Voice mode
   const voiceMode = ref<VoiceMode>('open')
   const pttKey = ref('Space')
   const pttActive = ref(false)
 
-  // Громкость per-participant, 0–1
+  const micError = ref('')
+  const isMicTesting = ref(false)
+
+  // Громкость per-participant
   const participantVolumes = ref<Map<string, number>>(new Map())
 
-  // Mic test (loopback: mic → speakers)
-  const isMicTesting = ref(false)
-  let micTestStream: MediaStream | null = null
-  let micTestContext: AudioContext | null = null
+  // Подписка на события от Rust
+  let unlistenSpeakers: (() => void) | null = null
+  let unlistenDisconnected: (() => void) | null = null
 
-  // VAD internals (non-reactive)
-  let vadContext: AudioContext | null = null
-  let vadStream: MediaStream | null = null
-  let vadAnimFrame: number | null = null
-  let vadSpeaking = false
-  let vadSilenceStart = 0
-  const VAD_THRESHOLD = 12   // avg byte energy 0–255
-  const VAD_SILENCE_MS = 400
+  async function setupListeners() {
+    unlistenSpeakers?.()
+    unlistenDisconnected?.()
+
+    unlistenSpeakers = await listen<string[]>('voice://active-speakers', (e) => {
+      activeSpeakers.value = new Set(e.payload)
+    })
+
+    unlistenDisconnected = await listen('voice://disconnected', () => {
+      activeChannelId.value = null
+      isMuted.value = false
+      isDeafened.value = false
+      pttActive.value = false
+    })
+  }
 
   async function connectToLiveKit(url: string, token: string) {
+    micError.value = ''
     try {
-      if (room.value) await room.value.disconnect()
-
-      const newRoom = new Room({ adaptiveStream: true, dynacast: true })
-
-      newRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-        activeSpeakers.value = new Set(speakers.map((s) => s.identity))
+      await setupListeners()
+      await invoke('join_voice_channel', {
+        url,
+        token,
+        inputDevice: selectedInputCpalName.value || null,
+        outputDevice: selectedOutputCpalName.value || null,
       })
-
-      newRoom.on(RoomEvent.Disconnected, () => {
-        activeChannelId.value = null
-        stopVad()
-        pttActive.value = false
-      })
-
-      console.log('[voice] connecting to LiveKit:', url)
-      await newRoom.connect(url, token)
-      console.log('[voice] connected to LiveKit room:', newRoom.name)
-
-      // Разблокировать воспроизведение аудио в WebView2 (Edge autoplay policy)
-      await newRoom.startAudio().catch((e) => console.warn('[voice] startAudio:', e))
-
-      if (selectedOutputId.value) {
-        await newRoom.switchActiveDevice('audiooutput', selectedOutputId.value).catch((e) => {
-          console.warn('[voice] failed to set output device:', e)
-        })
-      }
-
-      const micOpts = selectedInputId.value ? { deviceId: selectedInputId.value } : undefined
 
       if (voiceMode.value === 'open') {
         isMuted.value = false
-        await newRoom.localParticipant.setMicrophoneEnabled(true, micOpts)
       } else {
         isMuted.value = true
-        await newRoom.localParticipant.setMicrophoneEnabled(false, micOpts)
-        if (voiceMode.value === 'vad') startVad()
+        await invoke('set_muted', { muted: true })
       }
-
-      room.value = newRoom
-    } catch (e) {
-      console.error('[voice] LiveKit connection failed:', e)
+    } catch (e: any) {
+      micError.value = 'Ошибка подключения к голосу: ' + String(e)
+      console.error('[voice] join failed:', e)
       activeChannelId.value = null
     }
   }
 
   async function disconnect() {
-    stopVad()
     pttActive.value = false
-    await room.value?.disconnect()
-    room.value = null
-    activeChannelId.value = null
     isMuted.value = false
     isDeafened.value = false
+    activeChannelId.value = null
+    await invoke('leave_voice_channel').catch(() => {})
+    unlistenSpeakers?.()
+    unlistenDisconnected?.()
   }
 
   async function toggleMute() {
     if (voiceMode.value !== 'open') return
     isMuted.value = !isMuted.value
-    await room.value?.localParticipant.setMicrophoneEnabled(!isMuted.value)
+    await invoke('set_muted', { muted: isMuted.value })
   }
 
   async function toggleDeafen() {
     isDeafened.value = !isDeafened.value
-    room.value?.remoteParticipants.forEach((p) => {
-      p.audioTrackPublications.forEach((pub) => {
-        if (pub.track) (pub.track as RemoteAudioTrack).setMuted(isDeafened.value)
-      })
-    })
+    await invoke('set_deafened', { deafened: isDeafened.value })
   }
 
   async function pttPress() {
-    if (voiceMode.value !== 'ptt' || !room.value || pttActive.value) return
+    if (voiceMode.value !== 'ptt' || pttActive.value) return
     pttActive.value = true
     isMuted.value = false
-    await room.value.localParticipant.setMicrophoneEnabled(true)
+    await invoke('set_muted', { muted: false })
   }
 
   async function pttRelease() {
-    if (voiceMode.value !== 'ptt' || !room.value) return
+    if (voiceMode.value !== 'ptt') return
     pttActive.value = false
     isMuted.value = true
-    await room.value.localParticipant.setMicrophoneEnabled(false)
-  }
-
-  async function startVad() {
-    stopVad()
-    try {
-      vadStream = await navigator.mediaDevices.getUserMedia({
-        audio: selectedInputId.value
-          ? { deviceId: selectedInputId.value }
-          : true,
-      })
-      vadContext = new AudioContext()
-      const source = vadContext.createMediaStreamSource(vadStream)
-      const analyser = vadContext.createAnalyser()
-      analyser.fftSize = 256
-      source.connect(analyser)
-      const data = new Uint8Array(analyser.frequencyBinCount)
-      vadSpeaking = false
-      vadSilenceStart = 0
-
-      const tick = () => {
-        analyser.getByteFrequencyData(data)
-        const energy = data.reduce((a, b) => a + b, 0) / data.length
-
-        if (energy > VAD_THRESHOLD) {
-          if (!vadSpeaking) {
-            vadSpeaking = true
-            vadSilenceStart = 0
-            room.value?.localParticipant.setMicrophoneEnabled(true)
-          }
-        } else if (vadSpeaking) {
-          if (!vadSilenceStart) vadSilenceStart = Date.now()
-          if (Date.now() - vadSilenceStart > VAD_SILENCE_MS) {
-            vadSpeaking = false
-            room.value?.localParticipant.setMicrophoneEnabled(false)
-          }
-        }
-
-        vadAnimFrame = requestAnimationFrame(tick)
-      }
-      vadAnimFrame = requestAnimationFrame(tick)
-    } catch (e) {
-      console.error('VAD init failed:', e)
-    }
-  }
-
-  function stopVad() {
-    if (vadAnimFrame !== null) { cancelAnimationFrame(vadAnimFrame); vadAnimFrame = null }
-    vadStream?.getTracks().forEach((t) => t.stop())
-    vadStream = null
-    vadContext?.close()
-    vadContext = null
-    vadSpeaking = false
-    vadSilenceStart = 0
+    await invoke('set_muted', { muted: true })
   }
 
   async function startMicTest() {
     stopMicTest()
     try {
-      micTestStream = await navigator.mediaDevices.getUserMedia({
-        audio: selectedInputId.value ? { deviceId: selectedInputId.value } : true,
+      await invoke('start_mic_test', {
+        inputDevice: selectedInputCpalName.value || null,
       })
-      micTestContext = new AudioContext()
-      const source = micTestContext.createMediaStreamSource(micTestStream)
-      source.connect(micTestContext.destination)
       isMicTesting.value = true
     } catch (e) {
       console.error('[voice] mic test failed:', e)
@@ -202,29 +126,16 @@ export const useVoiceStore = defineStore('voice', () => {
   }
 
   function stopMicTest() {
-    micTestStream?.getTracks().forEach((t) => t.stop())
-    micTestStream = null
-    micTestContext?.close()
-    micTestContext = null
     isMicTesting.value = false
+    invoke('stop_mic_test').catch(() => {})
   }
 
-  async function setOutputDevice(deviceId: string) {
-    selectedOutputId.value = deviceId
-    if (room.value && deviceId) {
-      await room.value.switchActiveDevice('audiooutput', deviceId).catch((e) => {
-        console.warn('[voice] failed to switch output device:', e)
-      })
-    }
+  function setInputCpalName(name: string) {
+    selectedInputCpalName.value = name
   }
 
-  function setParticipantVolume(userId: string, volume: number) {
-    participantVolumes.value.set(userId, volume)
-    room.value?.remoteParticipants.forEach((p) => {
-      if (p.identity === userId) {
-        p.audioTrackPublications.forEach((pub) => (pub.track as RemoteAudioTrack | undefined)?.setVolume(volume))
-      }
-    })
+  function setOutputCpalName(name: string) {
+    selectedOutputCpalName.value = name
   }
 
   function updateVoiceState(state: VoiceState) {
@@ -239,13 +150,19 @@ export const useVoiceStore = defineStore('voice', () => {
     return [...voiceStates.value.values()].filter((s) => s.channel_id === channelId)
   }
 
+  // no-op для совместимости (больше не нужен — AudioContext не используется)
+  async function prewarmAudio() {}
+
   return {
-    room, activeChannelId, isMuted, isDeafened, voiceStates, activeSpeakers,
-    selectedInputId, selectedOutputId, voiceMode, pttKey, pttActive,
-    participantVolumes,
+    activeChannelId, isMuted, isDeafened, voiceStates, activeSpeakers,
+    selectedInputCpalName, selectedOutputCpalName,
+    voiceMode, pttKey, pttActive,
+    participantVolumes, micError,
+    isMicTesting,
     connectToLiveKit, disconnect, toggleMute, toggleDeafen,
-    pttPress, pttRelease, startVad, stopVad,
-    isMicTesting, startMicTest, stopMicTest,
-    setOutputDevice, setParticipantVolume, updateVoiceState, participantsInChannel,
+    pttPress, pttRelease,
+    startMicTest, stopMicTest,
+    setInputCpalName, setOutputCpalName,
+    prewarmAudio, updateVoiceState, participantsInChannel,
   }
 })

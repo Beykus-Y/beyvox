@@ -1,0 +1,17 @@
+# Caddyfile для продакшна BeyVox
+# Скопируй в Caddyfile и замени домены на свои
+
+# Центральный сервер авторизации (site/)
+beyvox.your-domain.com {
+    reverse_proxy beyvox-central:3000
+}
+
+# Community сервер (server/)
+server.your-domain.com {
+    reverse_proxy beyvox-server:8080
+}
+
+# LiveKit SFU WebSocket — запущен с network_mode: host, поэтому через host.docker.internal
+live.your-domain.com {
+    reverse_proxy host.docker.internal:7880
+}

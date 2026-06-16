@@ -90,8 +90,10 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                 let _ = tx.send(ServerEvent::Ready {
                                     user_id: uid,
                                     username,
-                                    guilds,
+                                    guilds: guilds.clone(),
                                 });
+                                // Сразу шлём актуальные voice states — клиент не знает кто уже в голосе
+                                send_existing_voice_states(&state, &tx, &guilds).await;
                             }
                             Err(e) => {
                                 tracing::error!("identify failed: {e:#}");
@@ -141,6 +143,30 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     if let Some(uid) = uid_opt {
         state.connections.remove(&uid);
         cleanup_on_disconnect(&state, uid).await;
+    }
+}
+
+async fn send_existing_voice_states(state: &AppState, tx: &ClientSender, guilds: &[GuildSummary]) {
+    use sqlx::Row;
+    for guild in guilds {
+        let rows = sqlx::query(
+            "SELECT user_id, guild_id, channel_id, is_muted, is_deafened
+             FROM voice_states WHERE guild_id = $1",
+        )
+        .bind(guild.id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+
+        for row in rows {
+            let _ = tx.send(ServerEvent::VoiceStateUpdate {
+                user_id: row.get("user_id"),
+                guild_id: row.get("guild_id"),
+                channel_id: row.get("channel_id"),
+                is_muted: row.get("is_muted"),
+                is_deafened: row.get("is_deafened"),
+            });
+        }
     }
 }
 

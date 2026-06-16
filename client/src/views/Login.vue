@@ -99,7 +99,17 @@ async function submit() {
       showVerify.value = true
     }
   } catch (e: any) {
-    error.value = e?.response?.data?.error || 'Ошибка подключения'
+    const status = e?.response?.status
+    const msg = e?.response?.data?.error
+    if (mode.value === 'login' && status === 401) {
+      error.value = 'Неверный логин или пароль'
+    } else if (status === 409) {
+      error.value = msg === 'username already taken' ? 'Этот ник уже занят' : 'Этот email уже зарегистрирован'
+    } else if (status === 400) {
+      error.value = msg || 'Проверь введённые данные'
+    } else {
+      error.value = 'Ошибка подключения'
+    }
   } finally {
     loading.value = false
   }

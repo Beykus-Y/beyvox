@@ -1,0 +1,26 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: beyvox-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    # host-gateway нужен чтобы Caddy мог проксировать на LiveKit,
+    # который запущен с network_mode: host (не в Docker сети)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - beyvox-proxy
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  beyvox-proxy:
+    external: true

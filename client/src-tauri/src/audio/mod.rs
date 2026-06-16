@@ -7,7 +7,6 @@ pub struct AudioDevice {
     pub id: String,
 }
 
-/// Возвращает список микрофонов
 #[tauri::command]
 pub fn list_input_devices() -> Vec<AudioDevice> {
     let host = cpal::default_host();
@@ -23,7 +22,6 @@ pub fn list_input_devices() -> Vec<AudioDevice> {
         .unwrap_or_default()
 }
 
-/// Возвращает список динамиков/наушников
 #[tauri::command]
 pub fn list_output_devices() -> Vec<AudioDevice> {
     let host = cpal::default_host();
@@ -39,18 +37,12 @@ pub fn list_output_devices() -> Vec<AudioDevice> {
         .unwrap_or_default()
 }
 
-/// Имя дефолтного устройства ввода
 #[tauri::command]
 pub fn default_input_device() -> Option<String> {
-    cpal::default_host()
-        .default_input_device()
-        .and_then(|d| d.name().ok())
+    cpal::default_host().default_input_device().and_then(|d| d.name().ok())
 }
 
-/// Имя дефолтного устройства вывода
 #[tauri::command]
 pub fn default_output_device() -> Option<String> {
-    cpal::default_host()
-        .default_output_device()
-        .and_then(|d| d.name().ok())
+    cpal::default_host().default_output_device().and_then(|d| d.name().ok())
 }

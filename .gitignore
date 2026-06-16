@@ -6,6 +6,7 @@ Cargo.lock
 .env
 keys/
 livekit-keys.yaml
+livekit.yaml
 
 # Tauri
 client/src-tauri/target/

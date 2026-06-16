@@ -63,10 +63,16 @@
       @join-voice="joinVoice"
       @toggle-mute="voice.toggleMute()"
       @toggle-deafen="voice.toggleDeafen()"
-      @set-volume="voice.setParticipantVolume"
+      @set-volume="() => {}"
       @create-channel="openCreateChannel"
       @toggle="channelSidebarOpen = !channelSidebarOpen"
     />
+
+    <!-- Ошибка микрофона -->
+    <div v-if="voice.micError" class="mic-error-banner" @click="voice.micError = ''">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      {{ voice.micError }}
+    </div>
 
     <!-- Нет выбранной гильдии — подсказка в основной области -->
     <div v-else-if="serversStore.activeUrl" class="no-guild-main">
@@ -225,15 +231,15 @@
           <template v-if="activeSettingsTab === 'audio'">
             <div class="settings-field">
               <label>Микрофон</label>
-              <select v-model="voice.selectedInputId">
-                <option value="" disabled>Выбери устройство...</option>
+              <select :value="voice.selectedInputCpalName" @change="voice.setInputCpalName(($event.target as HTMLSelectElement).value)">
+                <option value="">По умолчанию (Windows)</option>
                 <option v-for="d in inputDevices" :key="d.id" :value="d.id">{{ d.name }}</option>
               </select>
             </div>
             <div class="settings-field">
               <label>Динамики / Наушники</label>
-              <select v-model="voice.selectedOutputId">
-                <option value="" disabled>Выбери устройство...</option>
+              <select :value="voice.selectedOutputCpalName" @change="voice.setOutputCpalName(($event.target as HTMLSelectElement).value)">
+                <option value="">По умолчанию (Windows)</option>
                 <option v-for="d in outputDevices" :key="d.id" :value="d.id">{{ d.name }}</option>
               </select>
             </div>
@@ -261,10 +267,6 @@
                   <input type="radio" v-model="voice.voiceMode" value="ptt" />
                   Push-to-Talk
                 </label>
-                <label class="voice-mode-opt" :class="{ active: voice.voiceMode === 'vad' }">
-                  <input type="radio" v-model="voice.voiceMode" value="vad" />
-                  По голосу (VAD)
-                </label>
               </div>
             </div>
             <div v-if="voice.voiceMode === 'ptt'" class="settings-field">
@@ -273,9 +275,6 @@
                 {{ recordingPttKey ? 'Нажми клавишу...' : formatKeyCode(voice.pttKey) }}
               </button>
               <span class="settings-hint-sm">Удерживай клавишу чтобы говорить</span>
-            </div>
-            <div v-if="voice.voiceMode === 'vad'" class="settings-hint">
-              Микрофон автоматически включается при обнаружении голоса.
             </div>
           </template>
 
@@ -619,12 +618,14 @@ async function selectTextChannel(channel: any) {
   }
 }
 
-function joinVoice(channel: any) {
+async function joinVoice(channel: any) {
   if (!guild.activeGuildId) return
   if (voice.activeChannelId === channel.id) {
     ws.joinVoiceChannel(guild.activeGuildId, null)
     voice.disconnect()
   } else {
+    // Вызываем прямо из click-хэндлера — до async WS round-trip, чтобы AudioContext разблокировался
+    await voice.prewarmAudio()
     ws.joinVoiceChannel(guild.activeGuildId, channel.id)
   }
 }
@@ -670,10 +671,8 @@ async function openSettings() {
   showSettings.value = true
   activeSettingsTab.value = 'account'
   try {
-    inputDevices.value = await invoke<AudioDevice[]>('list_input_devices')
-    outputDevices.value = await invoke<AudioDevice[]>('list_output_devices')
-    if (!voice.selectedInputId) voice.selectedInputId = await invoke<string>('default_input_device').catch(() => '')
-    if (!voice.selectedOutputId) voice.selectedOutputId = await invoke<string>('default_output_device').catch(() => '')
+    inputDevices.value = await invoke<{ id: string; name: string }[]>('list_input_devices')
+    outputDevices.value = await invoke<{ id: string; name: string }[]>('list_output_devices')
   } catch {}
 }
 
@@ -844,6 +843,26 @@ function logout() { auth.logout(); router.push('/login') }
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .btn-icon-danger:hover { background: rgba(255,85,85,0.15); color: var(--red); }
+
+.mic-error-banner {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(242, 63, 67, 0.15);
+  border: 1px solid var(--red);
+  border-radius: 8px;
+  padding: 10px 16px;
+  color: var(--red);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1000;
+  cursor: pointer;
+  max-width: 500px;
+  text-align: center;
+}
 
 .btn-danger {
   padding: 10px 18px; border-radius: 6px;

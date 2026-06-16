@@ -1,4 +1,5 @@
 mod audio;
+mod voice;
 mod vst;
 
 #[cfg(debug_assertions)]
@@ -23,6 +24,12 @@ pub fn run() {
             audio::list_output_devices,
             audio::default_input_device,
             audio::default_output_device,
+            voice::join_voice_channel,
+            voice::leave_voice_channel,
+            voice::set_muted,
+            voice::set_deafened,
+            voice::start_mic_test,
+            voice::stop_mic_test,
             vst::load_vst_info,
             vst::open_vst_gui,
         ])

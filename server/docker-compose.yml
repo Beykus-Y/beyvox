@@ -9,56 +9,58 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"   # 5433 чтобы не конфликтовать с site если оба запущены локально
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U beyvox -d beyvox_server"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - internal
 
+  # LiveKit SFU — host networking обязателен для корректной работы WebRTC/TURN.
+  # Биндится напрямую на IP хоста без Docker NAT (иначе ICE кандидаты некорректны).
+  # Конфиг: скопируй livekit.yaml.example → livekit.yaml и подставь свои значения.
   livekit:
     image: livekit/livekit-server:latest
     container_name: beyvox-livekit
     restart: unless-stopped
-    command: >
-      --bind 0.0.0.0
-      --port 7880
-      --udp-port 7882
-      --keys "devkey: devsecret_at_least_32_chars_long!!"
-    ports:
-      - "7880:7880"           # WebSocket API
-      - "7881:7881"           # WebRTC over TCP
-      - "7882:7882/udp"       # WebRTC UDP Mux
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:7880/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    command: --config /etc/livekit/livekit.yaml
+    volumes:
+      - ./livekit.yaml:/etc/livekit/livekit.yaml:ro
+    network_mode: host
 
   server:
-    build: .
+    image: ghcr.io/beykus-y/beyvox-server:main
+    # build: .   # раскомментируй для локальной сборки
     container_name: beyvox-server
     restart: unless-stopped
     depends_on:
       postgres:
-        condition: service_healthy
-      livekit:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://beyvox:${DB_PASSWORD:-changeme}@postgres:5432/beyvox_server
       HOST: 0.0.0.0
       PORT: 8080
       CENTRAL_URL: ${CENTRAL_URL:-https://beyvox.beykus.fun}
-      LIVEKIT_URL: ws://livekit:7880
+      # Локально: ws://localhost:7880 | Продакшн с Caddy: wss://live.your-domain.com
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://localhost:7880}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-devsecret_at_least_32_chars_long!!}
       CATALOG_REGISTER: ${CATALOG_REGISTER:-false}
       SERVER_NAME: ${SERVER_NAME:-My BeyVox Server}
       SERVER_ADDRESS: ${SERVER_ADDRESS:-localhost:8080}
-      RUST_LOG: tower_http=debug,beyvox_server=debug
+      OWNER_USERNAME: ${OWNER_USERNAME:-admin}
+      RUST_LOG: ${RUST_LOG:-beyvox_server=info}
     ports:
-      - "8080:8080"
+      - "${PORT:-8080}:8080"
+    networks:
+      - internal
+      - beyvox-proxy
 
 volumes:
   postgres_data:
+
+networks:
+  internal:
+  beyvox-proxy:
+    external: true

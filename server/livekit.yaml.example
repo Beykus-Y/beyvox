@@ -1,0 +1,23 @@
+# LiveKit конфиг для продакшна
+# Скопируй в livekit.yaml и подставь свои значения
+# livekit.yaml добавлен в .gitignore (содержит секретные ключи)
+
+port: 7880
+rtc:
+  udp_port: 7882
+  # Обязательно: публичный IP сервера для ICE кандидатов
+  node_ip: YOUR_SERVER_IP
+
+# TURN сервер — нужен для пользователей за строгим NAT/корпоративным файрволом.
+# Работает только при network_mode: host в docker-compose (иначе relay порты недоступны).
+turn:
+  enabled: true
+  udp_port: 3478          # стандартный STUN/TURN порт, открой в файрволе
+
+# API ключи: apiKey: apiSecret (секрет минимум 32 символа)
+# Тот же ключ нужно прописать в .env сервера (LIVEKIT_API_KEY / LIVEKIT_API_SECRET)
+keys:
+  your_api_key: your_api_secret_at_least_32_chars_long
+
+logging:
+  level: info
