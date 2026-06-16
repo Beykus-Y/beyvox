@@ -184,10 +184,26 @@ pub async fn join_by_invite(
         }
     }
 
-    // Добавляем участника (обновляем username если уже был)
+    // Проверяем текущий статус пользователя в гильдии до любых изменений в БД
+    let existing = sqlx::query(
+        "SELECT is_banned FROM members WHERE user_id = $1 AND guild_id = $2",
+    )
+    .bind(user.user_id)
+    .bind(guild_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    if let Some(row) = existing {
+        if row.get::<bool, _>("is_banned") {
+            return Err(AppError::Forbidden);
+        }
+        // Уже участник — возвращаем гильдию без записи в members и без расхода инвайта
+        return get_guild(State(state), user, Path(guild_id)).await;
+    }
+
+    // Новый участник: добавляем в members и инкрементируем счётчик
     sqlx::query(
-        "INSERT INTO members (user_id, guild_id, username) VALUES ($1, $2, $3)
-         ON CONFLICT (user_id, guild_id) DO UPDATE SET username = EXCLUDED.username",
+        "INSERT INTO members (user_id, guild_id, username) VALUES ($1, $2, $3)",
     )
     .bind(user.user_id)
     .bind(guild_id)
@@ -195,7 +211,6 @@ pub async fn join_by_invite(
     .execute(&state.db)
     .await?;
 
-    // Инкрементируем счётчик
     sqlx::query("UPDATE invites SET uses = uses + 1 WHERE code = $1")
         .bind(&code)
         .execute(&state.db)

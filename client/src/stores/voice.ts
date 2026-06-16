@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
 import { Room, RoomEvent, RemoteAudioTrack } from 'livekit-client'
+import { useAuthStore } from './auth'
 
 export type VoiceMode = 'open' | 'ptt' | 'vad'
 
@@ -60,6 +61,12 @@ export const useVoiceStore = defineStore('voice', () => {
       console.log('[voice] connecting to LiveKit:', url)
       await newRoom.connect(url, token)
       console.log('[voice] connected to LiveKit room:', newRoom.name)
+
+      if (selectedOutputId.value) {
+        await newRoom.switchActiveDevice('audiooutput', selectedOutputId.value).catch((e) => {
+          console.warn('[voice] failed to set output device:', e)
+        })
+      }
 
       const micOpts = selectedInputId.value ? { deviceId: selectedInputId.value } : undefined
 
@@ -171,6 +178,15 @@ export const useVoiceStore = defineStore('voice', () => {
     vadSilenceStart = 0
   }
 
+  async function setOutputDevice(deviceId: string) {
+    selectedOutputId.value = deviceId
+    if (room.value && deviceId) {
+      await room.value.switchActiveDevice('audiooutput', deviceId).catch((e) => {
+        console.warn('[voice] failed to switch output device:', e)
+      })
+    }
+  }
+
   function setParticipantVolume(userId: string, volume: number) {
     participantVolumes.value.set(userId, volume)
     room.value?.remoteParticipants.forEach((p) => {
@@ -182,7 +198,8 @@ export const useVoiceStore = defineStore('voice', () => {
 
   function updateVoiceState(state: VoiceState) {
     voiceStates.value.set(state.user_id, state)
-    if (state.channel_id) {
+    const auth = useAuthStore()
+    if (state.user_id === auth.userId) {
       activeChannelId.value = state.channel_id
     }
   }
@@ -197,6 +214,6 @@ export const useVoiceStore = defineStore('voice', () => {
     participantVolumes,
     connectToLiveKit, disconnect, toggleMute, toggleDeafen,
     pttPress, pttRelease, startVad, stopVad,
-    setParticipantVolume, updateVoiceState, participantsInChannel,
+    setOutputDevice, setParticipantVolume, updateVoiceState, participantsInChannel,
   }
 })

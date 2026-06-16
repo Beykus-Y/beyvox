@@ -102,7 +102,7 @@ export const useGuildStore = defineStore('guild', () => {
 
   async function joinByInvite(code: string) {
     const { data } = await apiClient().post(`/invites/${code}/join`)
-    guilds.value.push(data.guild)
+    guilds.value.push(data)
     return data
   }
 

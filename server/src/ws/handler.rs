@@ -54,13 +54,15 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         }
     });
 
-    let mut user_id: Option<Uuid> = None;
+    let shared_uid = Arc::new(std::sync::Mutex::new(None::<Uuid>));
 
     // Основной цикл чтения сообщений от клиента
     let mut recv_task = tokio::spawn({
         let state = state.clone();
         let tx = tx.clone();
+        let shared_uid = shared_uid.clone();
         async move {
+            let mut user_id: Option<Uuid> = None;
             while let Some(Ok(msg)) = stream.next().await {
                 let text = match msg {
                     Message::Text(t) => t,
@@ -83,6 +85,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         match identify(&state, &token).await {
                             Ok((uid, username, guilds)) => {
                                 user_id = Some(uid);
+                                *shared_uid.lock().unwrap() = Some(uid);
                                 state.connections.insert(uid, tx.clone());
                                 let _ = tx.send(ServerEvent::Ready {
                                     user_id: uid,
@@ -124,20 +127,47 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     }
                 }
             }
-
-            user_id
         }
     });
 
     // Ждём завершения любой из задач
     tokio::select! {
         _ = &mut send_task => recv_task.abort(),
-        uid = &mut recv_task => {
-            send_task.abort();
-            if let Ok(Some(uid)) = uid {
-                state.connections.remove(&uid);
-            }
-        }
+        _ = &mut recv_task => send_task.abort(),
+    }
+
+    // Очистка в любом случае: убираем из connections и закрываем голосовые состояния
+    let uid_opt = *shared_uid.lock().unwrap(); // drop the guard before .await
+    if let Some(uid) = uid_opt {
+        state.connections.remove(&uid);
+        cleanup_on_disconnect(&state, uid).await;
+    }
+}
+
+async fn cleanup_on_disconnect(state: &AppState, user_id: Uuid) {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "DELETE FROM voice_states WHERE user_id = $1 RETURNING guild_id",
+    )
+    .bind(user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    for row in rows {
+        let guild_id: Uuid = row.get("guild_id");
+        broadcast_to_guild(
+            state,
+            guild_id,
+            ServerEvent::VoiceStateUpdate {
+                user_id,
+                guild_id,
+                channel_id: None,
+                is_muted: false,
+                is_deafened: false,
+            },
+        )
+        .await;
     }
 }
 

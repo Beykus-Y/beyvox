@@ -57,7 +57,7 @@ pub async fn register(
     .fetch_one(&state.db)
     .await
     .map_err(|e| match e {
-        sqlx::Error::Database(ref db_err) if db_err.constraint() == Some("users_username_key") => {
+        sqlx::Error::Database(ref db_err) if db_err.constraint() == Some("users_username_lower_key") => {
             AppError::Conflict("username already taken".into())
         }
         sqlx::Error::Database(ref db_err) if db_err.constraint() == Some("users_email_key") => {
@@ -260,7 +260,7 @@ pub async fn login(
     Json(body): Json<LoginRequest>,
 ) -> AppResult<Json<AuthResponse>> {
     let row = sqlx::query(
-        "SELECT id, username, password_hash, email_verified FROM users WHERE username = $1 OR email = $1",
+        "SELECT id, username, password_hash, email_verified FROM users WHERE LOWER(username) = $1 OR email = $1",
     )
     .bind(body.login.to_lowercase())
     .fetch_optional(&state.db)
