@@ -33,6 +33,11 @@ export const useVoiceStore = defineStore('voice', () => {
   // Громкость per-participant, 0–1
   const participantVolumes = ref<Map<string, number>>(new Map())
 
+  // Mic test (loopback: mic → speakers)
+  const isMicTesting = ref(false)
+  let micTestStream: MediaStream | null = null
+  let micTestContext: AudioContext | null = null
+
   // VAD internals (non-reactive)
   let vadContext: AudioContext | null = null
   let vadStream: MediaStream | null = null
@@ -61,6 +66,9 @@ export const useVoiceStore = defineStore('voice', () => {
       console.log('[voice] connecting to LiveKit:', url)
       await newRoom.connect(url, token)
       console.log('[voice] connected to LiveKit room:', newRoom.name)
+
+      // Разблокировать воспроизведение аудио в WebView2 (Edge autoplay policy)
+      await newRoom.startAudio().catch((e) => console.warn('[voice] startAudio:', e))
 
       if (selectedOutputId.value) {
         await newRoom.switchActiveDevice('audiooutput', selectedOutputId.value).catch((e) => {
@@ -178,6 +186,29 @@ export const useVoiceStore = defineStore('voice', () => {
     vadSilenceStart = 0
   }
 
+  async function startMicTest() {
+    stopMicTest()
+    try {
+      micTestStream = await navigator.mediaDevices.getUserMedia({
+        audio: selectedInputId.value ? { deviceId: selectedInputId.value } : true,
+      })
+      micTestContext = new AudioContext()
+      const source = micTestContext.createMediaStreamSource(micTestStream)
+      source.connect(micTestContext.destination)
+      isMicTesting.value = true
+    } catch (e) {
+      console.error('[voice] mic test failed:', e)
+    }
+  }
+
+  function stopMicTest() {
+    micTestStream?.getTracks().forEach((t) => t.stop())
+    micTestStream = null
+    micTestContext?.close()
+    micTestContext = null
+    isMicTesting.value = false
+  }
+
   async function setOutputDevice(deviceId: string) {
     selectedOutputId.value = deviceId
     if (room.value && deviceId) {
@@ -214,6 +245,7 @@ export const useVoiceStore = defineStore('voice', () => {
     participantVolumes,
     connectToLiveKit, disconnect, toggleMute, toggleDeafen,
     pttPress, pttRelease, startVad, stopVad,
+    isMicTesting, startMicTest, stopMicTest,
     setOutputDevice, setParticipantVolume, updateVoiceState, participantsInChannel,
   }
 })

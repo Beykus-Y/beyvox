@@ -238,6 +238,19 @@
               </select>
             </div>
             <div class="settings-field">
+              <label>Тест микрофона</label>
+              <button
+                class="mic-test-btn"
+                :class="{ active: voice.isMicTesting }"
+                @click="voice.isMicTesting ? voice.stopMicTest() : voice.startMicTest()"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2z"/>
+                </svg>
+                {{ voice.isMicTesting ? 'Остановить тест (слышишь себя)' : 'Проверить микрофон' }}
+              </button>
+            </div>
+            <div class="settings-field">
               <label>Режим микрофона</label>
               <div class="voice-mode-group">
                 <label class="voice-mode-opt" :class="{ active: voice.voiceMode === 'open' }">
@@ -845,6 +858,24 @@ function logout() { auth.logout(); router.push('/login') }
 .token-input { flex: 1; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text1); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 .btn-secondary { background: var(--bg-hover); border: 1px solid var(--border); border-radius: 6px; color: var(--text1); padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 .btn-secondary:hover { background: var(--bg-active); }
+
+.mic-test-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-light);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  align-self: flex-start;
+}
+.mic-test-btn:hover { border-color: var(--accent); color: var(--text); }
+.mic-test-btn.active { border-color: var(--green, #23a55a); background: rgba(35, 165, 90, 0.12); color: var(--green, #23a55a); }
 
 .voice-mode-group {
   display: flex;
