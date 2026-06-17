@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useAuthStore } from './auth'
@@ -21,11 +21,14 @@ export const useVoiceStore = defineStore('voice', () => {
   const voiceStates = ref<Map<string, VoiceState>>(new Map())
   const activeSpeakers = ref<Set<string>>(new Set())
 
-  const selectedInputCpalName = ref('')  // cpal device name для микрофона
-  const selectedOutputCpalName = ref('') // cpal device name для динамиков
+  const selectedInputCpalName = ref(localStorage.getItem('voice_input_device') || '')
+  const selectedOutputCpalName = ref(localStorage.getItem('voice_output_device') || '')
 
-  const voiceMode = ref<VoiceMode>('open')
-  const pttKey = ref('Space')
+  const micVolume = ref(Number(localStorage.getItem('voice_mic_volume') ?? 100))
+  const playbackVolume = ref(Number(localStorage.getItem('voice_playback_volume') ?? 100))
+
+  const voiceMode = ref<VoiceMode>((localStorage.getItem('voice_mode') as VoiceMode) || 'open')
+  const pttKey = ref(localStorage.getItem('voice_ptt_key') || 'Space')
   const pttActive = ref(false)
 
   const micError = ref('')
@@ -132,10 +135,32 @@ export const useVoiceStore = defineStore('voice', () => {
 
   function setInputCpalName(name: string) {
     selectedInputCpalName.value = name
+    localStorage.setItem('voice_input_device', name)
   }
 
   function setOutputCpalName(name: string) {
     selectedOutputCpalName.value = name
+    localStorage.setItem('voice_output_device', name)
+  }
+
+  async function setMicVolume(percent: number) {
+    micVolume.value = percent
+    localStorage.setItem('voice_mic_volume', String(percent))
+    await invoke('set_mic_volume', { percent })
+  }
+
+  async function setPlaybackVolume(percent: number) {
+    playbackVolume.value = percent
+    localStorage.setItem('voice_playback_volume', String(percent))
+    await invoke('set_playback_volume', { percent })
+  }
+
+  watch(voiceMode, v => localStorage.setItem('voice_mode', v))
+
+  // Вызывается при старте приложения — восстанавливает gain в Rust из сохранённых настроек
+  async function initVoiceSettings() {
+    await invoke('set_mic_volume', { percent: micVolume.value })
+    await invoke('set_playback_volume', { percent: playbackVolume.value })
   }
 
   function updateVoiceState(state: VoiceState) {
@@ -163,6 +188,7 @@ export const useVoiceStore = defineStore('voice', () => {
     pttPress, pttRelease,
     startMicTest, stopMicTest,
     setInputCpalName, setOutputCpalName,
+    micVolume, playbackVolume, setMicVolume, setPlaybackVolume, initVoiceSettings,
     prewarmAudio, updateVoiceState, participantsInChannel,
   }
 })

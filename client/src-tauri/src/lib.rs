@@ -1,4 +1,5 @@
 mod audio;
+mod effects;
 mod voice;
 mod vst;
 
@@ -30,8 +31,14 @@ pub fn run() {
             voice::set_deafened,
             voice::start_mic_test,
             voice::stop_mic_test,
+            voice::set_mic_volume,
+            voice::set_playback_volume,
             vst::load_vst_info,
             vst::open_vst_gui,
+            effects::set_noise_gate,
+            effects::set_compressor,
+            effects::set_eq,
+            effects::get_effects_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

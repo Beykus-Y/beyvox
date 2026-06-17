@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -38,6 +38,9 @@ struct VoiceEngine {
 
 static ENGINE: Mutex<Option<VoiceEngine>> = Mutex::new(None);
 static DEAFENED: AtomicBool = AtomicBool::new(false);
+// Громкость хранится как f32 побитово в AtomicU32 (нет AtomicF32 в std)
+static MIC_GAIN: AtomicU32 = AtomicU32::new(1065353216); // 1.0f32.to_bits()
+static PLAYBACK_GAIN: AtomicU32 = AtomicU32::new(1065353216);
 
 // Mic test streams (отдельные от голосовых)
 static TEST_CAPTURE: Mutex<Option<SendStream>> = Mutex::new(None);
@@ -227,6 +230,18 @@ pub fn stop_mic_test() {
     *TEST_PLAYBACK.lock().unwrap() = None;
 }
 
+#[tauri::command]
+pub fn set_mic_volume(percent: u32) {
+    let gain = (percent as f32 / 100.0).clamp(0.0, 2.0);
+    MIC_GAIN.store(gain.to_bits(), Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn set_playback_volume(percent: u32) {
+    let gain = (percent as f32 / 100.0).clamp(0.0, 2.0);
+    PLAYBACK_GAIN.store(gain.to_bits(), Ordering::Relaxed);
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 fn find_device(
@@ -264,19 +279,38 @@ fn start_capture(
     let fmt = supported.sample_format();
     let config: cpal::StreamConfig = supported.into();
 
-    let to_mono_i16 = move |f32_avg: f32| -> i16 {
-        (f32_avg.clamp(-1.0, 1.0) * i16::MAX as f32) as i16
-    };
+    // Обновляем sample rate в цепочке эффектов до старта потока
+    if let Ok(mut c) = crate::effects::get_chain().lock() {
+        c.set_sample_rate(sample_rate as f32);
+    }
+    let chain = crate::effects::get_chain();
+
+    // Общий хелпер: собирает моно f32, применяет эффекты, конвертирует в i16
+    // (вызывается из замыкания потока — chain и tx захватываются по move)
+    macro_rules! send_mono {
+        ($chain:expr, $tx:expr, $mono:expr) => {{
+            let mut mono = $mono;
+            if let Ok(mut c) = $chain.try_lock() {
+                c.process(&mut mono);
+            }
+            let samples: Vec<i16> = mono
+                .iter()
+                .map(|&s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)
+                .collect();
+            let _ = $tx.try_send(samples);
+        }};
+    }
 
     let stream = match fmt {
         SampleFormat::F32 => device.build_input_stream(
             &config,
             move |data: &[f32], _| {
-                let mono: Vec<i16> = data
+                let gain = f32::from_bits(MIC_GAIN.load(Ordering::Relaxed));
+                let mono: Vec<f32> = data
                     .chunks(channels)
-                    .map(|f| to_mono_i16(f.iter().sum::<f32>() / channels as f32))
+                    .map(|f| f.iter().sum::<f32>() / channels as f32 * gain)
                     .collect();
-                let _ = tx.try_send(mono);
+                send_mono!(chain, tx, mono);
             },
             |e| eprintln!("[voice] capture error: {e}"),
             None,
@@ -284,14 +318,15 @@ fn start_capture(
         SampleFormat::I16 => device.build_input_stream(
             &config,
             move |data: &[i16], _| {
-                let mono: Vec<i16> = data
+                let gain = f32::from_bits(MIC_GAIN.load(Ordering::Relaxed));
+                let mono: Vec<f32> = data
                     .chunks(channels)
                     .map(|f| {
                         let sum: i32 = f.iter().map(|&s| s as i32).sum();
-                        (sum / channels as i32) as i16
+                        (sum / channels as i32) as f32 / i16::MAX as f32 * gain
                     })
                     .collect();
-                let _ = tx.try_send(mono);
+                send_mono!(chain, tx, mono);
             },
             |e| eprintln!("[voice] capture error: {e}"),
             None,
@@ -299,14 +334,15 @@ fn start_capture(
         SampleFormat::U16 => device.build_input_stream(
             &config,
             move |data: &[u16], _| {
-                let mono: Vec<i16> = data
+                let gain = f32::from_bits(MIC_GAIN.load(Ordering::Relaxed));
+                let mono: Vec<f32> = data
                     .chunks(channels)
                     .map(|f| {
                         let avg = f.iter().map(|&s| s as f32).sum::<f32>() / channels as f32;
-                        to_mono_i16(avg / u16::MAX as f32 * 2.0 - 1.0)
+                        (avg / u16::MAX as f32 * 2.0 - 1.0) * gain
                     })
                     .collect();
-                let _ = tx.try_send(mono);
+                send_mono!(chain, tx, mono);
             },
             |e| eprintln!("[voice] capture error: {e}"),
             None,
@@ -339,10 +375,11 @@ fn start_playback(
                 }
                 let mut bufs = mixer.lock().unwrap();
                 for frame in output.chunks_mut(channels) {
-                    let sample: f32 = bufs
+                    let gain = f32::from_bits(PLAYBACK_GAIN.load(Ordering::Relaxed));
+                    let sample: f32 = (bufs
                         .values_mut()
                         .filter_map(|q| q.pop_front())
-                        .sum::<f32>()
+                        .sum::<f32>() * gain)
                         .clamp(-1.0, 1.0);
                     frame.fill(sample); // mono → все каналы (stereo/etc)
                 }

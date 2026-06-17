@@ -34,10 +34,10 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 - [x] Развернуть LiveKit сервер (Docker)
 - [x] `beyvox-server`: интеграция с LiveKit (создание room, выдача токенов)
 - [x] `beyvox-server`: WebSocket signaling (`VOICE_STATE_UPDATE`, `VOICE_SERVER_UPDATE`)
-- [x] `beyvox-client`: подключение к голосовому каналу через LiveKit JS SDK
+- [x] `beyvox-client`: подключение к голосовому каналу через LiveKit Rust SDK (cpal + NativeAudioSource/Stream)
 - [x] `beyvox-client`: выбор устройств (микрофон, динамики/наушники)
 - [x] `beyvox-client`: PTT (Push-to-Talk) — настройка клавиши
-- [x] `beyvox-client`: VAD (Voice Activity Detection)
+- [ ] `beyvox-client`: VAD (Voice Activity Detection) — убрано, будет через VST или RNNoise
 - [x] `beyvox-client`: индикация говорящих участников
 - [x] `beyvox-client`: mute себя / deafen
 - [x] `beyvox-client`: индивидуальная регулировка громкости участников
@@ -108,7 +108,7 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 Цель: пользователь загружает VST плагин, он применяется к микрофону.
 
 - [x] `beyvox-client`: UI загрузки VST файла в настройках аудио
-- [ ] `beyvox-client`: захват микрофона через `cpal` (основа аудиопайплайна)
+- [x] `beyvox-client`: захват микрофона через `cpal` (основа аудиопайплайна)
 - [ ] `beyvox-client`: хостинг VST2 (`.dll`/`.so`/`.dylib`) через крейт `vst`
 - [ ] `beyvox-client`: хостинг VST3 (`.vst3`) через `vst3-sys`
 - [ ] `beyvox-client`: цепочка эффектов — порядок плагинов настраивается

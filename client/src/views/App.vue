@@ -244,6 +244,24 @@
               </select>
             </div>
             <div class="settings-field">
+              <label>Громкость микрофона — {{ voice.micVolume }}%</label>
+              <input
+                type="range" min="0" max="200" step="5"
+                :value="voice.micVolume"
+                @input="voice.setMicVolume(+($event.target as HTMLInputElement).value)"
+                class="volume-slider"
+              />
+            </div>
+            <div class="settings-field">
+              <label>Громкость воспроизведения — {{ voice.playbackVolume }}%</label>
+              <input
+                type="range" min="0" max="200" step="5"
+                :value="voice.playbackVolume"
+                @input="voice.setPlaybackVolume(+($event.target as HTMLInputElement).value)"
+                class="volume-slider"
+              />
+            </div>
+            <div class="settings-field">
               <label>Тест микрофона</label>
               <button
                 class="mic-test-btn"
@@ -275,6 +293,114 @@
                 {{ recordingPttKey ? 'Нажми клавишу...' : formatKeyCode(voice.pttKey) }}
               </button>
               <span class="settings-hint-sm">Удерживай клавишу чтобы говорить</span>
+            </div>
+          </template>
+
+          <template v-if="activeSettingsTab === 'effects'">
+            <p class="settings-hint">Встроенные эффекты применяются к микрофону до OPUS кодека. Порядок: Gate → Compressor → EQ.</p>
+
+            <!-- Noise Gate -->
+            <div class="effect-section">
+              <div class="effect-header">
+                <div class="effect-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                  Noise Gate
+                </div>
+                <label class="fx-toggle">
+                  <input type="checkbox" v-model="fx.gate.enabled" @change="applyGate" />
+                  <span class="fx-toggle-track"></span>
+                </label>
+              </div>
+              <div v-if="fx.gate.enabled" class="effect-params">
+                <div class="settings-field">
+                  <label>Порог — {{ fx.gate.threshold_db }} dB</label>
+                  <input type="range" min="-80" max="-10" step="1" v-model.number="fx.gate.threshold_db" @input="applyGate" class="volume-slider" />
+                </div>
+                <div class="fx-row">
+                  <div class="settings-field">
+                    <label>Атака — {{ fx.gate.attack_ms }} мс</label>
+                    <input type="range" min="1" max="50" step="1" v-model.number="fx.gate.attack_ms" @input="applyGate" class="volume-slider" />
+                  </div>
+                  <div class="settings-field">
+                    <label>Спад — {{ fx.gate.release_ms }} мс</label>
+                    <input type="range" min="10" max="1000" step="10" v-model.number="fx.gate.release_ms" @input="applyGate" class="volume-slider" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Compressor -->
+            <div class="effect-section">
+              <div class="effect-header">
+                <div class="effect-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/></svg>
+                  Compressor / Limiter
+                </div>
+                <label class="fx-toggle">
+                  <input type="checkbox" v-model="fx.comp.enabled" @change="applyCompressor" />
+                  <span class="fx-toggle-track"></span>
+                </label>
+              </div>
+              <div v-if="fx.comp.enabled" class="effect-params">
+                <div class="fx-row">
+                  <div class="settings-field">
+                    <label>Порог — {{ fx.comp.threshold_db }} dB</label>
+                    <input type="range" min="-60" max="0" step="1" v-model.number="fx.comp.threshold_db" @input="applyCompressor" class="volume-slider" />
+                  </div>
+                  <div class="settings-field">
+                    <label>Степень — {{ fx.comp.ratio }}:1</label>
+                    <input type="range" min="1" max="20" step="0.5" v-model.number="fx.comp.ratio" @input="applyCompressor" class="volume-slider" />
+                  </div>
+                </div>
+                <div class="fx-row">
+                  <div class="settings-field">
+                    <label>Атака — {{ fx.comp.attack_ms }} мс</label>
+                    <input type="range" min="1" max="100" step="1" v-model.number="fx.comp.attack_ms" @input="applyCompressor" class="volume-slider" />
+                  </div>
+                  <div class="settings-field">
+                    <label>Спад — {{ fx.comp.release_ms }} мс</label>
+                    <input type="range" min="10" max="500" step="10" v-model.number="fx.comp.release_ms" @input="applyCompressor" class="volume-slider" />
+                  </div>
+                </div>
+                <div class="settings-field">
+                  <label>Компенсация — {{ fx.comp.makeup_db > 0 ? '+' : '' }}{{ fx.comp.makeup_db }} dB</label>
+                  <input type="range" min="-12" max="24" step="0.5" v-model.number="fx.comp.makeup_db" @input="applyCompressor" class="volume-slider" />
+                </div>
+              </div>
+            </div>
+
+            <!-- 3-band EQ -->
+            <div class="effect-section">
+              <div class="effect-header">
+                <div class="effect-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20h4V4h-4v16zm-6 0h4v-8H4v8zM16 9v11h4V9h-4z"/></svg>
+                  EQ (3-полосный)
+                </div>
+                <label class="fx-toggle">
+                  <input type="checkbox" v-model="fx.eq.enabled" @change="applyEq" />
+                  <span class="fx-toggle-track"></span>
+                </label>
+              </div>
+              <div v-if="fx.eq.enabled" class="effect-params">
+                <div class="fx-row">
+                  <div class="settings-field">
+                    <label>Низы 200Hz — {{ fx.eq.low_db > 0 ? '+' : '' }}{{ fx.eq.low_db }} dB</label>
+                    <input type="range" min="-18" max="18" step="0.5" v-model.number="fx.eq.low_db" @input="applyEq" class="volume-slider" />
+                  </div>
+                  <div class="settings-field">
+                    <label>Мид {{ fx.eq.mid_freq }}Hz — {{ fx.eq.mid_db > 0 ? '+' : '' }}{{ fx.eq.mid_db }} dB</label>
+                    <input type="range" min="-18" max="18" step="0.5" v-model.number="fx.eq.mid_db" @input="applyEq" class="volume-slider" />
+                  </div>
+                  <div class="settings-field">
+                    <label>Верх 8kHz — {{ fx.eq.high_db > 0 ? '+' : '' }}{{ fx.eq.high_db }} dB</label>
+                    <input type="range" min="-18" max="18" step="0.5" v-model.number="fx.eq.high_db" @input="applyEq" class="volume-slider" />
+                  </div>
+                </div>
+                <div class="settings-field">
+                  <label>Частота мида — {{ fx.eq.mid_freq }} Hz</label>
+                  <input type="range" min="200" max="6000" step="50" v-model.number="fx.eq.mid_freq" @input="applyEq" class="volume-slider" />
+                </div>
+              </div>
             </div>
           </template>
 
@@ -313,7 +439,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openFile } from '@tauri-apps/plugin-dialog'
@@ -371,8 +497,16 @@ const tokenCopied = ref(false)
 const settingsTabs = [
   { id: 'account', label: 'Аккаунт' },
   { id: 'audio', label: 'Аудио' },
+  { id: 'effects', label: 'Эффекты' },
   { id: 'vst', label: 'VST плагины' },
 ]
+
+// Built-in effects state
+const fx = reactive({
+  gate: { enabled: false, threshold_db: -40, attack_ms: 5, release_ms: 200 },
+  comp: { enabled: false, threshold_db: -18, ratio: 4, attack_ms: 5, release_ms: 100, makeup_db: 0 },
+  eq: { enabled: false, low_db: 0, mid_db: 0, mid_freq: 1000, high_db: 0 },
+})
 interface AudioDevice { id: string; name: string }
 interface VstInfo { path: string; name: string; vendor: string; version: string; num_inputs: number; num_outputs: number }
 const vstPlugins = ref<VstInfo[]>([])
@@ -398,6 +532,8 @@ onMounted(() => {
   }
   document.addEventListener('keydown', handlePttKeyDown)
   document.addEventListener('keyup', handlePttKeyUp)
+  voice.initVoiceSettings()
+  initEffects()
 })
 
 onUnmounted(() => {
@@ -424,6 +560,7 @@ function startRecordingPttKey() {
     e.preventDefault()
     e.stopPropagation()
     voice.pttKey = e.code
+    localStorage.setItem('voice_ptt_key', e.code)
     recordingPttKey.value = false
     document.removeEventListener('keydown', handler, true)
   }
@@ -442,6 +579,52 @@ function formatKeyCode(code: string): string {
   if (code.startsWith('Key')) return code.slice(3)
   if (code.startsWith('Digit')) return code.slice(5)
   return code
+}
+
+// === Built-in effects ===
+function initEffects() {
+  const savedGate = localStorage.getItem('fx_gate')
+  const savedComp = localStorage.getItem('fx_comp')
+  const savedEq = localStorage.getItem('fx_eq')
+  if (savedGate) Object.assign(fx.gate, JSON.parse(savedGate))
+  if (savedComp) Object.assign(fx.comp, JSON.parse(savedComp))
+  if (savedEq) Object.assign(fx.eq, JSON.parse(savedEq))
+  applyGate()
+  applyCompressor()
+  applyEq()
+}
+
+async function applyGate() {
+  localStorage.setItem('fx_gate', JSON.stringify(fx.gate))
+  await invoke('set_noise_gate', {
+    enabled: fx.gate.enabled,
+    thresholdDb: fx.gate.threshold_db,
+    attackMs: fx.gate.attack_ms,
+    releaseMs: fx.gate.release_ms,
+  }).catch(() => {})
+}
+
+async function applyCompressor() {
+  localStorage.setItem('fx_comp', JSON.stringify(fx.comp))
+  await invoke('set_compressor', {
+    enabled: fx.comp.enabled,
+    thresholdDb: fx.comp.threshold_db,
+    ratio: fx.comp.ratio,
+    attackMs: fx.comp.attack_ms,
+    releaseMs: fx.comp.release_ms,
+    makeupGainDb: fx.comp.makeup_db,
+  }).catch(() => {})
+}
+
+async function applyEq() {
+  localStorage.setItem('fx_eq', JSON.stringify(fx.eq))
+  await invoke('set_eq', {
+    enabled: fx.eq.enabled,
+    lowGainDb: fx.eq.low_db,
+    midGainDb: fx.eq.mid_db,
+    midFreq: fx.eq.mid_freq,
+    highGainDb: fx.eq.high_db,
+  }).catch(() => {})
 }
 
 // === Переключение серверов ===
@@ -817,6 +1000,13 @@ function logout() { auth.logout(); router.push('/login') }
 .settings-field select:focus { border-color: var(--accent); }
 .settings-field select option { background: var(--bg-dark); }
 
+.volume-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+  height: 4px;
+}
+
 .vst-list { display: flex; flex-direction: column; gap: 6px; min-height: 60px; }
 .vst-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -936,6 +1126,52 @@ function logout() { auth.logout(); router.push('/login') }
 @keyframes ptt-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
 .settings-hint-sm { font-size: 11px; color: var(--text2); }
+
+/* Effects tab */
+.effect-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.effect-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-light);
+}
+.effect-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--text);
+}
+.effect-params {
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--bg-dark);
+  border-top: 1px solid var(--border);
+}
+.fx-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;
+}
+
+/* Toggle switch */
+.fx-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+.fx-toggle input { display: none; }
+.fx-toggle-track {
+  width: 36px; height: 20px; border-radius: 10px;
+  background: var(--bg-hover); border: 1px solid var(--border);
+  position: relative; transition: background 0.2s, border-color 0.2s;
+}
+.fx-toggle-track::after {
+  content: ''; position: absolute;
+  top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text2); transition: transform 0.2s, background 0.2s;
+}
+.fx-toggle input:checked + .fx-toggle-track {
+  background: var(--accent); border-color: var(--accent);
+}
+.fx-toggle input:checked + .fx-toggle-track::after {
+  transform: translateX(16px); background: #fff;
+}
 
 .btn-add-vst {
   display: flex; align-items: center; gap: 6px;
