@@ -7,15 +7,6 @@ use uuid::Uuid;
 use crate::{error::{AppError, AppResult}, AppState};
 
 #[derive(Serialize)]
-pub struct GuildSnapshot {
-    pub guild_id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub member_count: i32,
-    pub is_default: bool,
-}
-
-#[derive(Serialize)]
 pub struct ServerEntry {
     pub id: Uuid,
     pub name: String,
@@ -24,8 +15,8 @@ pub struct ServerEntry {
     pub address: String,
     pub tags: Vec<String>,
     pub online_count: i32,
+    pub total_members: i64,
     pub last_ping: Option<chrono::DateTime<Utc>>,
-    pub guilds: Vec<GuildSnapshot>,
 }
 
 #[derive(Deserialize)]
@@ -46,50 +37,26 @@ pub async fn list_servers(
     State(state): State<AppState>,
 ) -> AppResult<Json<Vec<ServerEntry>>> {
     let server_rows = sqlx::query(
-        "SELECT id, name, description, icon_url, address, tags, online_count, last_ping
+        "SELECT id, name, description, icon_url, address, tags, online_count, total_members, last_ping
          FROM servers
          WHERE is_public = true AND last_ping > NOW() - INTERVAL '10 minutes'
-         ORDER BY online_count DESC",
-    )
-    .fetch_all(&state.db)
-    .await?;
-
-    let guild_rows = sqlx::query(
-        "SELECT gs.server_id, gs.guild_id, gs.name, gs.description, gs.member_count, gs.is_default
-         FROM guild_snapshots gs
-         INNER JOIN servers s ON s.id = gs.server_id
-         WHERE s.is_public = true AND s.last_ping > NOW() - INTERVAL '10 minutes'",
+         ORDER BY total_members DESC, online_count DESC",
     )
     .fetch_all(&state.db)
     .await?;
 
     let servers = server_rows
         .iter()
-        .map(|r| {
-            let server_id: Uuid = r.get("id");
-            let guilds = guild_rows
-                .iter()
-                .filter(|g| g.get::<Uuid, _>("server_id") == server_id)
-                .map(|g| GuildSnapshot {
-                    guild_id: g.get("guild_id"),
-                    name: g.get("name"),
-                    description: g.get("description"),
-                    member_count: g.get("member_count"),
-                    is_default: g.get("is_default"),
-                })
-                .collect();
-
-            ServerEntry {
-                id: server_id,
-                name: r.get("name"),
-                description: r.get("description"),
-                icon_url: r.get("icon_url"),
-                address: r.get("address"),
-                tags: r.get("tags"),
-                online_count: r.get("online_count"),
-                last_ping: r.get("last_ping"),
-                guilds,
-            }
+        .map(|r| ServerEntry {
+            id: r.get("id"),
+            name: r.get("name"),
+            description: r.get("description"),
+            icon_url: r.get("icon_url"),
+            address: r.get("address"),
+            tags: r.get("tags"),
+            online_count: r.get("online_count"),
+            total_members: r.get::<i32, _>("total_members") as i64,
+            last_ping: r.get("last_ping"),
         })
         .collect();
 
@@ -130,8 +97,8 @@ pub async fn register_server(
         address: row.get("address"),
         tags: row.get("tags"),
         online_count: row.get("online_count"),
+        total_members: 0,
         last_ping: row.get("last_ping"),
-        guilds: vec![],
     }))
 }
 

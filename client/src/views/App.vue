@@ -133,15 +133,9 @@
               <div class="ps-name">{{ s.name }}</div>
               <div class="ps-desc">{{ s.description || 'Нет описания' }}</div>
               <div class="ps-meta">
+                <span class="ps-members">{{ s.total_members }} участников</span>
                 <span class="ps-online">{{ s.online_count }} онлайн</span>
                 <span v-for="t in s.tags" :key="t" class="tag">{{ t }}</span>
-              </div>
-              <div v-if="s.guilds.length" class="ps-guilds">
-                <span v-for="g in s.guilds" :key="g.guild_id" class="ps-guild-chip">
-                  {{ g.name }}
-                  <span v-if="g.is_default" class="ps-guild-default">●</span>
-                  <span class="ps-guild-count">{{ g.member_count }}</span>
-                </span>
               </div>
             </div>
             <button
@@ -1140,7 +1134,7 @@ function focusGuilds() {
   color: var(--text-secondary);
 }
 
-.ps-guilds { display: flex; flex-wrap: wrap; gap: 4px; }
+.ps-members { color: var(--text-secondary); font-size: 12px; }
 .ps-guild-chip {
   display: flex;
   align-items: center;

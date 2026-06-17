@@ -459,7 +459,8 @@ pub struct DiscoveryResponse {
     pub name: String,
     pub version: &'static str,
     pub online_count: usize,
-    pub guilds: Vec<GuildSummary>,
+    pub total_members: i64,
+    pub default_guild: Option<GuildSummary>,
 }
 
 #[derive(Serialize)]
@@ -468,38 +469,47 @@ pub struct GuildSummary {
     pub name: String,
     pub description: Option<String>,
     pub member_count: i64,
-    pub is_default: bool,
 }
 
 pub async fn discovery(State(state): State<AppState>) -> AppResult<Json<DiscoveryResponse>> {
-    let rows = sqlx::query(
-        "SELECT g.id, g.name, g.description, g.is_default,
+    // Суммарное число участников по всем гильдиям
+    let total_members: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(cnt), 0) FROM (
+             SELECT COUNT(m.user_id) as cnt
+             FROM guilds g
+             LEFT JOIN members m ON m.guild_id = g.id AND m.is_banned = false
+             GROUP BY g.id
+         ) sub",
+    )
+    .fetch_one(&state.db)
+    .await?;
+
+    // Только дефолтная гильдия — точка входа для новых участников
+    let default_row = sqlx::query(
+        "SELECT g.id, g.name, g.description,
                 COUNT(m.user_id) as member_count
          FROM guilds g
          LEFT JOIN members m ON m.guild_id = g.id AND m.is_banned = false
-         WHERE g.is_public = true
+         WHERE g.is_default = true
          GROUP BY g.id
-         ORDER BY g.is_default DESC, g.created_at ASC",
+         LIMIT 1",
     )
-    .fetch_all(&state.db)
+    .fetch_optional(&state.db)
     .await?;
 
-    let guilds = rows
-        .iter()
-        .map(|r| GuildSummary {
-            id: r.get("id"),
-            name: r.get("name"),
-            description: r.get("description"),
-            member_count: r.get("member_count"),
-            is_default: r.get("is_default"),
-        })
-        .collect();
+    let default_guild = default_row.map(|r| GuildSummary {
+        id: r.get("id"),
+        name: r.get("name"),
+        description: r.get("description"),
+        member_count: r.get("member_count"),
+    });
 
     Ok(Json(DiscoveryResponse {
         name: state.config.server_name.clone(),
         version: env!("CARGO_PKG_VERSION"),
         online_count: state.connections.len(),
-        guilds,
+        total_members,
+        default_guild,
     }))
 }
 

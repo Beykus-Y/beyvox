@@ -7,16 +7,7 @@ use crate::AppState;
 #[derive(Deserialize)]
 struct DiscoveryResponse {
     online_count: Option<i32>,
-    guilds: Vec<GuildSummary>,
-}
-
-#[derive(Deserialize)]
-struct GuildSummary {
-    id: Uuid,
-    name: String,
-    description: Option<String>,
-    member_count: i64,
-    is_default: bool,
+    total_members: Option<i64>,
 }
 
 pub fn spawn(state: AppState) {
@@ -81,48 +72,18 @@ async fn pull_server(
     };
 
     let online = discovery.online_count.unwrap_or(0);
+    let total_members = discovery.total_members.unwrap_or(0) as i32;
 
     let _ = sqlx::query(
-        "UPDATE servers SET last_ping = NOW(), online_count = $1 WHERE id = $2",
+        "UPDATE servers SET last_ping = NOW(), online_count = $1, total_members = $2 WHERE id = $3",
     )
     .bind(online)
+    .bind(total_members)
     .bind(server_id)
     .execute(&state.db)
     .await;
 
-    // Удаляем устаревшие guild snapshots этого сервера, вставляем актуальные
-    let _ = sqlx::query("DELETE FROM guild_snapshots WHERE server_id = $1")
-        .bind(server_id)
-        .execute(&state.db)
-        .await;
-
-    for g in &discovery.guilds {
-        let _ = sqlx::query(
-            "INSERT INTO guild_snapshots (server_id, guild_id, name, description, member_count, is_default)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             ON CONFLICT (server_id, guild_id) DO UPDATE
-             SET name = EXCLUDED.name,
-                 description = EXCLUDED.description,
-                 member_count = EXCLUDED.member_count,
-                 is_default = EXCLUDED.is_default,
-                 updated_at = NOW()",
-        )
-        .bind(server_id)
-        .bind(g.id)
-        .bind(&g.name)
-        .bind(&g.description)
-        .bind(g.member_count as i32)
-        .bind(g.is_default)
-        .execute(&state.db)
-        .await;
-    }
-
-    tracing::debug!(
-        "puller: {} → {} guilds, {} online",
-        base_url,
-        discovery.guilds.len(),
-        online
-    );
+    tracing::debug!("puller: {} → {} members, {} online", base_url, total_members, online);
 }
 
 fn normalize_address(address: &str) -> String {

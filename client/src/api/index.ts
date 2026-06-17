@@ -47,14 +47,6 @@ export const serverApi = (serverUrl: string) =>
 
 const CENTRAL_URL = import.meta.env.VITE_CENTRAL_URL || 'https://beyvox.beykus.fun'
 
-export interface PublicGuild {
-  guild_id: string
-  name: string
-  description: string | null
-  member_count: number
-  is_default: boolean
-}
-
 export interface PublicServer {
   id: string
   name: string
@@ -63,7 +55,7 @@ export interface PublicServer {
   address: string
   tags: string[]
   online_count: number
-  guilds: PublicGuild[]
+  total_members: number
 }
 
 export async function fetchPublicServers(): Promise<PublicServer[]> {
