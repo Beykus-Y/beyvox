@@ -4,6 +4,7 @@ import { useAuthStore } from './auth'
 import { useGuildStore } from './guild'
 import { useVoiceStore } from './voice'
 import { useActivityStore } from './activity'
+import { PhoneCallSounds } from '../utils/sounds'
 
 type WsStatus = 'disconnected' | 'connecting' | 'connected'
 
@@ -116,9 +117,18 @@ export const useWsStore = defineStore('ws', () => {
       case 'VOICE_STATE_UPDATE': {
         const prevVoiceState = voice.voiceStates.get(event.d.user_id)
         const channelChanged = prevVoiceState?.channel_id !== event.d.channel_id
-        
+
+        // Наш юзер заходит в канал → outgoing ring до получения VOICE_SERVER_UPDATE
+        if (channelChanged && event.d.user_id === auth.userId) {
+          if (event.d.channel_id) {
+            PhoneCallSounds.startOutgoing()
+          } else {
+            PhoneCallSounds.stop()
+          }
+        }
+
         voice.updateVoiceState(event.d)
-        
+
         if (channelChanged && event.d.channel_id) {
           const member = guild.members.find(m => m.user_id === event.d.user_id)
           const name = member?.nickname || member?.username || event.d.user_id.slice(0, 8)

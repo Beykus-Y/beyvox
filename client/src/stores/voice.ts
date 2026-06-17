@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useAuthStore } from './auth'
+import { SoundEffects, PhoneCallSounds } from '../utils/sounds'
 
 export type VoiceMode = 'open' | 'ptt'
 
@@ -68,6 +69,9 @@ export const useVoiceStore = defineStore('voice', () => {
         outputDevice: selectedOutputCpalName.value || null,
       })
 
+      PhoneCallSounds.stop()
+      SoundEffects.join()
+
       if (voiceMode.value === 'open') {
         isMuted.value = false
       } else {
@@ -75,6 +79,7 @@ export const useVoiceStore = defineStore('voice', () => {
         await invoke('set_muted', { muted: true })
       }
     } catch (e: any) {
+      PhoneCallSounds.stop()
       micError.value = 'Ошибка подключения к голосу: ' + String(e)
       console.error('[voice] join failed:', e)
       activeChannelId.value = null
@@ -86,6 +91,8 @@ export const useVoiceStore = defineStore('voice', () => {
     isMuted.value = false
     isDeafened.value = false
     activeChannelId.value = null
+    PhoneCallSounds.stop()
+    SoundEffects.leave()
     await invoke('leave_voice_channel').catch(() => {})
     unlistenSpeakers?.()
     unlistenDisconnected?.()
@@ -94,11 +101,13 @@ export const useVoiceStore = defineStore('voice', () => {
   async function toggleMute() {
     if (voiceMode.value !== 'open') return
     isMuted.value = !isMuted.value
+    isMuted.value ? SoundEffects.muteMic() : SoundEffects.unmuteMic()
     await invoke('set_muted', { muted: isMuted.value })
   }
 
   async function toggleDeafen() {
     isDeafened.value = !isDeafened.value
+    isDeafened.value ? SoundEffects.deafen() : SoundEffects.undeafen()
     await invoke('set_deafened', { deafened: isDeafened.value })
   }
 
