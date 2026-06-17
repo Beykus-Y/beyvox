@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::{auth::AuthUser, error::{AppError, AppResult}, AppState};
 use crate::ws::{handler::broadcast_to_guild, types::{ServerEvent, WsChannel}};
 use super::guilds::ensure_member;
+use super::permissions::{ensure_permission, MANAGE_CHANNELS};
 
 #[derive(Serialize)]
 pub struct ChannelDto {
@@ -60,7 +61,7 @@ pub async fn create_channel(
     Json(body): Json<CreateChannelRequest>,
 ) -> AppResult<Json<ChannelDto>> {
     ensure_member(&state, user.user_id, guild_id).await?;
-    // TODO: проверить право MANAGE_CHANNELS
+    ensure_permission(&state, user.user_id, guild_id, MANAGE_CHANNELS).await?;
 
     if body.name.is_empty() || body.name.len() > 100 {
         return Err(AppError::BadRequest("name must be 1-100 chars".into()));
@@ -127,6 +128,7 @@ pub async fn delete_channel(
     Path((guild_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> AppResult<Json<serde_json::Value>> {
     ensure_member(&state, user.user_id, guild_id).await?;
+    ensure_permission(&state, user.user_id, guild_id, MANAGE_CHANNELS).await?;
 
     sqlx::query("DELETE FROM channels WHERE id = $1 AND guild_id = $2")
         .bind(channel_id)

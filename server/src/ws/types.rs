@@ -77,6 +77,31 @@ pub enum ServerEvent {
         user_id: Uuid,
         emoji: String,
     },
+    /// Участник обновлён (роли, мут, таймаут)
+    MemberUpdate {
+        guild_id: Uuid,
+        member: WsMember,
+    },
+    /// Участник покинул гильдию (кик/бан)
+    MemberRemove {
+        guild_id: Uuid,
+        user_id: Uuid,
+    },
+    /// Роль создана
+    RoleCreate {
+        guild_id: Uuid,
+        role: WsRole,
+    },
+    /// Роль обновлена
+    RoleUpdate {
+        guild_id: Uuid,
+        role: WsRole,
+    },
+    /// Роль удалена
+    RoleDelete {
+        guild_id: Uuid,
+        role_id: Uuid,
+    },
     /// Ответ на heartbeat
     HeartbeatAck,
     /// Ошибка
@@ -109,6 +134,26 @@ pub enum ClientEvent {
         guild_id: Uuid,
         channel_id: Uuid,
     },
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct WsMember {
+    pub user_id: Uuid,
+    pub username: String,
+    pub nickname: Option<String>,
+    pub is_muted: bool,
+    pub timeout_until: Option<chrono::DateTime<chrono::Utc>>,
+    pub role_ids: Vec<Uuid>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct WsRole {
+    pub id: Uuid,
+    pub guild_id: Uuid,
+    pub name: String,
+    pub color: Option<String>,
+    pub permissions: i64,
+    pub position: i32,
 }
 
 #[derive(Serialize, Clone, Debug)]

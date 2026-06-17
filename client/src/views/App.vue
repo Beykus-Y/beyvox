@@ -270,6 +270,13 @@
     <!-- Модальное окно настроек (Глобальное) -->
     <SettingsModal v-if="showSettings" @close="showSettings = false" />
 
+    <!-- Настройки гильдии -->
+    <GuildSettingsModal
+      v-if="showGuildSettings && guildSettingsId"
+      :guildId="guildSettingsId"
+      @close="showGuildSettings = false"
+    />
+
     <!-- Ошибка CPAL микрофона/устройства ввода -->
     <div v-if="voice.micError" class="mic-error-banner" @click="voice.micError = ''">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -303,6 +310,7 @@ import GuildsColumn from '../components/layout/GuildsColumn.vue'
 import ChatColumn from '../components/chat/ChatColumn.vue'
 import InfoColumn from '../components/layout/InfoColumn.vue'
 import SettingsModal from '../components/settings/SettingsModal.vue'
+import GuildSettingsModal from '../components/guild/GuildSettingsModal.vue'
 
 import { fetchPublicServers, type PublicServer } from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -331,6 +339,8 @@ const showInvite = ref(false)
 const showCreateInvite = ref(false)
 const showCreateChannel = ref(false)
 const showSettings = ref(false)
+const showGuildSettings = ref(false)
+const guildSettingsId = ref<string | null>(null)
 
 // Входные данные
 const serverUrlInput = ref('')
@@ -692,8 +702,12 @@ async function triggerCreateChannel(type: 'text' | 'voice') {
 // Выбор элементов
 async function selectGuild(guildId: string) {
   await guild.loadChannels(guildId)
-  await guild.loadMembers(guildId)
-  
+  await Promise.all([
+    guild.loadMembers(guildId),
+    guild.loadRoles(guildId),
+  ])
+  await guild.loadMyPermissions(guildId)
+
   // Автоматический выбор первого текстового канала
   const textCh = guild.channels.find(c => c.type === 'text')
   if (textCh) {
@@ -791,7 +805,10 @@ function logout() {
 }
 
 function openGuildSettings() {
-  // Настройки гильдии (если понадобятся, в ТЗ заглушка)
+  if (guild.activeGuildId) {
+    guildSettingsId.value = guild.activeGuildId
+    showGuildSettings.value = true
+  }
 }
 
 function guildSearch() {

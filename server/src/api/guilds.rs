@@ -4,6 +4,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{auth::AuthUser, error::{AppError, AppResult}, AppState};
+use super::permissions::{ensure_permission, MANAGE_MEMBERS};
 
 #[derive(Serialize)]
 pub struct GuildDto {
@@ -320,6 +321,58 @@ pub async fn join_by_invite(
     }
 
     fetch_guild_dto(&state, guild_id).await.map(Json)
+}
+
+pub async fn list_invites(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path(guild_id): Path<Uuid>,
+) -> AppResult<Json<Vec<InviteDto>>> {
+    ensure_member(&state, user.user_id, guild_id).await?;
+    ensure_permission(&state, user.user_id, guild_id, MANAGE_MEMBERS).await?;
+
+    let rows = sqlx::query(
+        "SELECT code, guild_id, uses, max_uses, expires_at FROM invites
+         WHERE guild_id = $1 ORDER BY created_at DESC",
+    )
+    .bind(guild_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    Ok(Json(
+        rows.iter()
+            .map(|r| InviteDto {
+                code: r.get("code"),
+                guild_id: r.get("guild_id"),
+                uses: r.get("uses"),
+                max_uses: r.get("max_uses"),
+                expires_at: r.get("expires_at"),
+            })
+            .collect(),
+    ))
+}
+
+pub async fn delete_invite(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path((guild_id, code)): Path<(Uuid, String)>,
+) -> AppResult<Json<serde_json::Value>> {
+    ensure_member(&state, user.user_id, guild_id).await?;
+    ensure_permission(&state, user.user_id, guild_id, MANAGE_MEMBERS).await?;
+
+    let deleted = sqlx::query(
+        "DELETE FROM invites WHERE code = $1 AND guild_id = $2",
+    )
+    .bind(&code)
+    .bind(guild_id)
+    .execute(&state.db)
+    .await?;
+
+    if deleted.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 pub async fn ensure_member(state: &AppState, user_id: Uuid, guild_id: Uuid) -> AppResult<()> {

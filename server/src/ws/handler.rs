@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::{fetch_jwks, Claims},
+    api::permissions::{ensure_permission, CONNECT_VOICE},
     ws::types::{ClientEvent, GuildSummary, ServerEvent},
     AppState,
 };
@@ -261,6 +262,14 @@ async fn handle_voice_state(
     is_muted: bool,
     is_deafened: bool,
 ) {
+    // Проверяем право на подключение к голосу
+    if channel_id.is_some() {
+        if let Err(_) = ensure_permission(state, user_id, guild_id, CONNECT_VOICE).await {
+            let _ = tx.send(ServerEvent::Error { message: "missing CONNECT_VOICE permission".into() });
+            return;
+        }
+    }
+
     // Обновляем voice_state в БД
     let res = sqlx::query(
         "INSERT INTO voice_states (user_id, guild_id, channel_id, is_muted, is_deafened, updated_at)

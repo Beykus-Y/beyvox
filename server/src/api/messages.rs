@@ -15,6 +15,7 @@ use crate::{
     AppState,
 };
 use super::guilds::ensure_member;
+use super::permissions::{ensure_channel_permission, SEND_MESSAGES};
 
 #[derive(Serialize, Clone)]
 pub struct ReactionSummary {
@@ -161,6 +162,23 @@ pub async fn send_message(
     Json(body): Json<SendMessageRequest>,
 ) -> AppResult<Json<MessageDto>> {
     ensure_member(&state, user.user_id, guild_id).await?;
+    ensure_channel_permission(&state, user.user_id, guild_id, channel_id, SEND_MESSAGES).await?;
+
+    // Проверка таймаута
+    let timeout_until: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
+        "SELECT timeout_until FROM members WHERE user_id = $1 AND guild_id = $2",
+    )
+    .bind(user.user_id)
+    .bind(guild_id)
+    .fetch_optional(&state.db)
+    .await?
+    .flatten();
+
+    if let Some(until) = timeout_until {
+        if until > chrono::Utc::now() {
+            return Err(AppError::Forbidden);
+        }
+    }
 
     if body.content.is_empty() || body.content.len() > 4000 {
         return Err(AppError::BadRequest("content must be 1-4000 chars".into()));

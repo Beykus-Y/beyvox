@@ -1,5 +1,5 @@
 <template>
-  <div class="voice-participant" :class="{ speaking: isSpeaking }">
+  <div class="voice-participant" :class="{ speaking: isSpeaking }" @contextmenu.prevent="openMenu">
     <!-- Аватар с индикацией разговора (speaking ring) -->
     <div class="avatar-container">
       <div class="participant-avatar" :class="{ 'speaking-ring': isSpeaking }">
@@ -42,13 +42,28 @@
         <span class="volume-percent">{{ Math.round(volume * 100) }}%</span>
       </div>
     </div>
+
+    <!-- ПКМ меню для модерации -->
+    <Teleport to="body">
+      <div v-if="menuVisible && !isSelf && (canMute || canKick)" class="ctx-overlay" @mousedown.self="closeMenu" @contextmenu.prevent>
+        <div class="ctx-menu" :style="{ top: menuY + 'px', left: menuX + 'px' }">
+          <button v-if="canMute" class="ctx-item" @click="doMute">
+            {{ isMuted ? 'Снять глушение' : 'Заглушить' }}
+          </button>
+          <div v-if="canMute && canKick" class="ctx-divider" />
+          <button v-if="canKick" class="ctx-item ctx-item-danger" @click="doKick">Кикнуть с сервера</button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useVoiceStore } from '../../stores/voice'
+import { useGuildStore, PERM } from '../../stores/guild'
+import { useAuthStore } from '../../stores/auth'
 
 const props = defineProps<{
   userId: string
@@ -58,7 +73,45 @@ const props = defineProps<{
 }>()
 
 const voice = useVoiceStore()
+const guildStore = useGuildStore()
+const auth = useAuthStore()
 const volume = ref(1.0)
+
+const isSelf = computed(() => props.userId === auth.userId)
+const canMute = computed(() => guildStore.hasPermission(PERM.MUTE_MEMBERS))
+const canKick = computed(() => guildStore.hasPermission(PERM.MANAGE_MEMBERS))
+
+const menuVisible = ref(false)
+const menuX = ref(0)
+const menuY = ref(0)
+
+function openMenu(e: MouseEvent) {
+  if (isSelf.value) return
+  menuX.value = Math.min(e.clientX, window.innerWidth - 160)
+  menuY.value = Math.min(e.clientY, window.innerHeight - 120)
+  menuVisible.value = true
+}
+
+function closeMenu() {
+  menuVisible.value = false
+}
+
+async function doMute() {
+  closeMenu()
+  const guildId = guildStore.activeGuildId
+  if (!guildId) return
+  const member = guildStore.members.find(m => m.user_id === props.userId)
+  await guildStore.muteMember(guildId, props.userId, !member?.is_muted)
+}
+
+async function doKick() {
+  closeMenu()
+  const guildId = guildStore.activeGuildId
+  if (!guildId) return
+  if (confirm(`Кикнуть ${props.username}?`)) {
+    await guildStore.kickMember(guildId, props.userId)
+  }
+}
 
 function updateVolume() {
   voice.participantVolumes.set(props.userId, volume.value)
@@ -204,5 +257,43 @@ onMounted(() => {
   color: var(--text-secondary);
   min-width: 24px;
   text-align: right;
+}
+
+.ctx-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+}
+
+.ctx-menu {
+  position: fixed;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 150px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.ctx-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 5px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.ctx-item:hover { background: var(--bg-hover); }
+.ctx-item-danger { color: #e63946; }
+.ctx-item-danger:hover { background: rgba(230, 57, 70, 0.12); }
+
+.ctx-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
 }
 </style>

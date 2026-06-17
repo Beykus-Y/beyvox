@@ -128,9 +128,25 @@ async fn main() -> anyhow::Result<()> {
             put(api::messages::add_reaction).delete(api::messages::remove_reaction))
         // Members
         .route("/guilds/:id/members", get(api::members::list_members))
+        .route("/guilds/:id/members/me", get(api::members::get_me))
         .route("/guilds/:gid/members/:uid/kick", post(api::members::kick_member))
         .route("/guilds/:gid/members/:uid/ban", post(api::members::ban_member))
         .route("/guilds/:gid/members/:uid/mute", post(api::members::mute_member))
+        .route("/guilds/:gid/members/:uid/timeout", post(api::members::timeout_member))
+        // Roles
+        .route("/guilds/:id/roles", get(api::roles::list_roles).post(api::roles::create_role))
+        .route("/guilds/:gid/roles/:rid", patch(api::roles::update_role).delete(api::roles::delete_role))
+        .route("/guilds/:gid/members/:uid/roles/:rid",
+            put(api::roles::assign_role).delete(api::roles::remove_role))
+        // Invites management
+        .route("/guilds/:id/invites", get(api::guilds::list_invites))
+        .route("/guilds/:id/invites/:code", delete(api::guilds::delete_invite))
+        // Channel permission overrides
+        .route("/guilds/:gid/channels/:cid/permissions",
+            get(api::channel_overrides::get_channel_permissions))
+        .route("/guilds/:gid/channels/:cid/permissions/:rid",
+            put(api::channel_overrides::set_channel_permission)
+            .delete(api::channel_overrides::delete_channel_permission))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);

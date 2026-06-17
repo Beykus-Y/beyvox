@@ -39,9 +39,9 @@
         </svg>
       </button>
 
-      <!-- Настройки гильдии (показываются только владельцу) -->
+      <!-- Настройки гильдии (owner или пользователи с правами управления) -->
       <button
-        v-if="isOwner"
+        v-if="canManage"
         class="action-btn"
         title="Настройки гильдии"
         @click="$emit('open-guild-settings')"
@@ -57,6 +57,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { Guild, Member } from '../../stores/guild'
+import { useGuildStore, PERM } from '../../stores/guild'
 
 const props = defineProps<{
   guild: Guild
@@ -66,11 +67,17 @@ const props = defineProps<{
 
 defineEmits(['open-guild-settings', 'create-invite', 'search', 'events'])
 
+const guildStore = useGuildStore()
 const avatarLoadError = ref(false)
 
-const isOwner = computed(() => {
-  return props.guild && props.guild.owner_id === props.userId
-})
+const isOwner = computed(() => props.guild && props.guild.owner_id === props.userId)
+
+const canManage = computed(() =>
+  isOwner.value ||
+  guildStore.hasPermission(PERM.MANAGE_ROLES) ||
+  guildStore.hasPermission(PERM.MANAGE_MEMBERS) ||
+  guildStore.hasPermission(PERM.MANAGE_CHANNELS)
+)
 
 const onlineCount = computed(() => {
   // Поскольку у нас нет явного статуса сети для каждого участника,

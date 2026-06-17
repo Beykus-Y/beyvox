@@ -146,6 +146,31 @@ export const useWsStore = defineStore('ws', () => {
         voice.connectToLiveKit(event.d.livekit_url, event.d.token)
         break
 
+      case 'MEMBER_UPDATE':
+        guild.handleMemberUpdate(event.d)
+        break
+
+      case 'MEMBER_REMOVE': {
+        guild.handleMemberRemove(event.d)
+        // Если нас кикнули/забанили — сбрасываем состояние
+        if (event.d.user_id === auth.userId) {
+          guild.reset()
+        }
+        break
+      }
+
+      case 'ROLE_CREATE':
+        guild.handleRoleCreate(event.d)
+        break
+
+      case 'ROLE_UPDATE':
+        guild.handleRoleUpdate(event.d)
+        break
+
+      case 'ROLE_DELETE':
+        guild.handleRoleDelete(event.d)
+        break
+
       case 'HEARTBEAT_ACK':
         break
     }
