@@ -128,6 +128,12 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                             issue_voice_token(&state, &tx, uid, guild_id, channel_id).await;
                         }
                     }
+
+                    ClientEvent::ScreenShareStateUpdate { guild_id, channel_id, is_sharing } => {
+                        if let Some(uid) = user_id {
+                            handle_screen_share_state(&state, &tx, uid, guild_id, channel_id, is_sharing).await;
+                        }
+                    }
                 }
             }
         }
@@ -151,7 +157,7 @@ async fn send_existing_voice_states(state: &AppState, tx: &ClientSender, guilds:
     use sqlx::Row;
     for guild in guilds {
         let rows = sqlx::query(
-            "SELECT user_id, guild_id, channel_id, is_muted, is_deafened
+            "SELECT user_id, guild_id, channel_id, is_muted, is_deafened, is_streaming
              FROM voice_states WHERE guild_id = $1",
         )
         .bind(guild.id)
@@ -160,13 +166,27 @@ async fn send_existing_voice_states(state: &AppState, tx: &ClientSender, guilds:
         .unwrap_or_default();
 
         for row in rows {
+            let user_id: Uuid = row.get("user_id");
+            let guild_id: Uuid = row.get("guild_id");
+            let channel_id: Option<Uuid> = row.get("channel_id");
+            let is_streaming: bool = row.get("is_streaming");
+
             let _ = tx.send(ServerEvent::VoiceStateUpdate {
-                user_id: row.get("user_id"),
-                guild_id: row.get("guild_id"),
-                channel_id: row.get("channel_id"),
+                user_id,
+                guild_id,
+                channel_id,
                 is_muted: row.get("is_muted"),
                 is_deafened: row.get("is_deafened"),
             });
+
+            if is_streaming {
+                let _ = tx.send(ServerEvent::ScreenShareStateUpdate {
+                    user_id,
+                    guild_id,
+                    channel_id,
+                    is_sharing: true,
+                });
+            }
         }
     }
 }
@@ -174,7 +194,7 @@ async fn send_existing_voice_states(state: &AppState, tx: &ClientSender, guilds:
 async fn cleanup_on_disconnect(state: &AppState, user_id: Uuid) {
     use sqlx::Row;
     let rows = sqlx::query(
-        "DELETE FROM voice_states WHERE user_id = $1 RETURNING guild_id",
+        "DELETE FROM voice_states WHERE user_id = $1 RETURNING guild_id, channel_id, is_streaming",
     )
     .bind(user_id)
     .fetch_all(&state.db)
@@ -183,6 +203,9 @@ async fn cleanup_on_disconnect(state: &AppState, user_id: Uuid) {
 
     for row in rows {
         let guild_id: Uuid = row.get("guild_id");
+        let channel_id: Option<Uuid> = row.get("channel_id");
+        let was_streaming: bool = row.get("is_streaming");
+
         broadcast_to_guild(
             state,
             guild_id,
@@ -195,7 +218,58 @@ async fn cleanup_on_disconnect(state: &AppState, user_id: Uuid) {
             },
         )
         .await;
+
+        if was_streaming {
+            broadcast_to_guild(
+                state,
+                guild_id,
+                ServerEvent::ScreenShareStateUpdate {
+                    user_id,
+                    guild_id,
+                    channel_id,
+                    is_sharing: false,
+                },
+            )
+            .await;
+        }
     }
+}
+
+async fn handle_screen_share_state(
+    state: &AppState,
+    tx: &ClientSender,
+    user_id: Uuid,
+    guild_id: Uuid,
+    channel_id: Uuid,
+    is_sharing: bool,
+) {
+    use crate::api::permissions::{ensure_permission, STREAM_SCREEN};
+
+    if is_sharing && ensure_permission(state, user_id, guild_id, STREAM_SCREEN).await.is_err() {
+        let _ = tx.send(ServerEvent::Error { message: "missing STREAM_SCREEN permission".into() });
+        return;
+    }
+
+    let _ = sqlx::query(
+        "UPDATE voice_states SET is_streaming = $1 WHERE user_id = $2 AND guild_id = $3",
+    )
+    .bind(is_sharing)
+    .bind(user_id)
+    .bind(guild_id)
+    .execute(&state.db)
+    .await;
+
+    broadcast_to_guild(
+        state,
+        guild_id,
+        ServerEvent::ScreenShareStateUpdate {
+            user_id,
+            guild_id,
+            channel_id: Some(channel_id),
+            is_sharing,
+        },
+    )
+    .await;
 }
 
 async fn identify(

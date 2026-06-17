@@ -43,6 +43,25 @@
       </div>
     </div>
 
+    <!-- Кнопка просмотра стрима (если участник стримит) -->
+    <button
+      v-if="isStreaming && !isSelf"
+      class="watch-btn"
+      title="Смотреть трансляцию"
+      @click.stop="watchStream"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+      </svg>
+    </button>
+
+    <!-- Иконка стрима на своём участнике -->
+    <span v-if="isStreaming && isSelf" class="streaming-badge" title="Идёт трансляция">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/>
+      </svg>
+    </span>
+
     <!-- ПКМ меню для модерации -->
     <Teleport to="body">
       <div v-if="menuVisible && !isSelf && (canMute || canKick)" class="ctx-overlay" @mousedown.self="closeMenu" @contextmenu.prevent>
@@ -64,17 +83,20 @@ import { invoke } from '@tauri-apps/api/core'
 import { useVoiceStore } from '../../stores/voice'
 import { useGuildStore, PERM } from '../../stores/guild'
 import { useAuthStore } from '../../stores/auth'
+import { useScreenStore } from '../../stores/screen'
 
 const props = defineProps<{
   userId: string
   username: string
   isMuted: boolean
   isSpeaking: boolean
+  isStreaming?: boolean
 }>()
 
 const voice = useVoiceStore()
 const guildStore = useGuildStore()
 const auth = useAuthStore()
+const screenStore = useScreenStore()
 const volume = ref(1.0)
 
 const isSelf = computed(() => props.userId === auth.userId)
@@ -111,6 +133,10 @@ async function doKick() {
   if (confirm(`Кикнуть ${props.username}?`)) {
     await guildStore.kickMember(guildId, props.userId)
   }
+}
+
+function watchStream() {
+  screenStore.watchStream(props.userId)
 }
 
 function updateVolume() {
@@ -295,5 +321,29 @@ onMounted(() => {
   height: 1px;
   background: var(--border);
   margin: 3px 0;
+}
+
+.watch-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.voice-participant:hover .watch-btn { opacity: 1; }
+
+.streaming-badge {
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 </style>

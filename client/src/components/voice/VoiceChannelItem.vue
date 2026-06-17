@@ -43,6 +43,7 @@
           :username="getMemberName(p.user_id)"
           :isMuted="p.is_muted"
           :isSpeaking="activeSpeakers.has(p.user_id)"
+          :isStreaming="screenStore.isParticipantSharing(p.user_id)"
         />
       </div>
     </transition>
@@ -52,8 +53,11 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import VoiceParticipant from './VoiceParticipant.vue'
+import { useScreenStore } from '../../stores/screen'
 import type { Channel, Member } from '../../stores/guild'
 import type { VoiceState } from '../../stores/voice'
+
+const screenStore = useScreenStore()
 
 const props = defineProps<{
   channel: Channel

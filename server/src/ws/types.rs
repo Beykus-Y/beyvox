@@ -102,6 +102,13 @@ pub enum ServerEvent {
         guild_id: Uuid,
         role_id: Uuid,
     },
+    /// Обновление состояния трансляции экрана участника
+    ScreenShareStateUpdate {
+        user_id: Uuid,
+        guild_id: Uuid,
+        channel_id: Option<Uuid>,
+        is_sharing: bool,
+    },
     /// Ответ на heartbeat
     HeartbeatAck,
     /// Ошибка
@@ -133,6 +140,12 @@ pub enum ClientEvent {
     RequestVoiceToken {
         guild_id: Uuid,
         channel_id: Uuid,
+    },
+    /// Начало или завершение трансляции экрана
+    ScreenShareStateUpdate {
+        guild_id: Uuid,
+        channel_id: Uuid,
+        is_sharing: bool,
     },
 }
 

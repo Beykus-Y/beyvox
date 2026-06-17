@@ -4,6 +4,7 @@ import { useAuthStore } from './auth'
 import { useGuildStore } from './guild'
 import { useVoiceStore } from './voice'
 import { useActivityStore } from './activity'
+import { useScreenStore } from './screen'
 import { PhoneCallSounds } from '../utils/sounds'
 
 type WsStatus = 'disconnected' | 'connecting' | 'connected'
@@ -170,6 +171,16 @@ export const useWsStore = defineStore('ws', () => {
       case 'ROLE_DELETE':
         guild.handleRoleDelete(event.d)
         break
+
+      case 'SCREEN_SHARE_STATE_UPDATE': {
+        const screen = useScreenStore()
+        screen.updateSharingState(
+          String(event.d.user_id),
+          event.d.channel_id ? String(event.d.channel_id) : null,
+          event.d.is_sharing,
+        )
+        break
+      }
 
       case 'HEARTBEAT_ACK':
         break

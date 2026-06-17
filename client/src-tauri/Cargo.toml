@@ -31,5 +31,7 @@ nnnoiseless = "0.5"
 directories = "5"
 livekit = { version = "0.7", features = ["tokio", "native-tls"] }
 futures-util = "0.3"
+screenshots = "0.8"
+image = { version = "0.24", default-features = false, features = ["jpeg"] }
 
 

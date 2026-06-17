@@ -100,11 +100,14 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 
 Цель: трансляция экрана/окна в голосовом канале.
 
-- [ ] `beyvox-client`: нативный захват экрана (Windows DXGI, Mac ScreenCaptureKit, Linux PipeWire)
-- [ ] `beyvox-client`: выбор — весь экран или конкретное окно
-- [ ] `beyvox-client`: настройки качества (360p/720p/1080p, 15/30/60 fps)
-- [ ] LiveKit simulcast: H264 основной + VP8 фолбэк
-- [ ] `beyvox-client`: UI просмотра стрима участников
+- [x] `beyvox-client`: нативный захват экрана (screenshots crate — Windows/Mac/Linux)
+- [x] `beyvox-client`: выбор монитора (список через `list_screens`)
+- [x] `beyvox-client`: настройки качества (360p/720p/1080p, 15/30/60 fps)
+- [x] LiveKit: публикация LocalVideoTrack с TrackSource::Screenshare (H264)
+- [x] `beyvox-client`: UI просмотра стрима (ScreenViewer с canvas/JPEG кадрами через Tauri events)
+- [x] `beyvox-server`: WS опкод SCREEN_SHARE_STATE_UPDATE (сигналинг, STREAM_SCREEN право)
+- [ ] LiveKit simulcast: VP8 фолбэк
+- [ ] Захват конкретного окна (а не только монитора)
 - [ ] Опционально: захват аудио рабочего стола (WASAPI/CoreAudio)
 
 ---

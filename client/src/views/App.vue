@@ -87,8 +87,23 @@
         @create-invite="openInviteCreate"
         @search="guildSearch"
         @events="guildEvents"
+        @toggle-screen-share="toggleScreenShare"
       />
     </div>
+
+    <!-- Screen Share: пикер выбора экрана -->
+    <ScreenPickerModal
+      v-if="showScreenPicker"
+      @close="showScreenPicker = false"
+      @started="onScreenShareStarted"
+    />
+
+    <!-- Screen Share: просмотр чужого стрима -->
+    <ScreenViewer
+      v-if="screenStore.viewingParticipant"
+      :userId="screenStore.viewingParticipant"
+      :username="getMemberUsername(screenStore.viewingParticipant)"
+    />
 
     <!-- Модалка: добавить сервер -->
     <div v-if="showAddServer" class="modal-overlay" @click.self="closeAddServer">
@@ -311,6 +326,8 @@ import ChatColumn from '../components/chat/ChatColumn.vue'
 import InfoColumn from '../components/layout/InfoColumn.vue'
 import SettingsModal from '../components/settings/SettingsModal.vue'
 import GuildSettingsModal from '../components/guild/GuildSettingsModal.vue'
+import ScreenPickerModal from '../components/voice/ScreenPickerModal.vue'
+import ScreenViewer from '../components/voice/ScreenViewer.vue'
 
 import { fetchPublicServers, type PublicServer } from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -319,6 +336,7 @@ import { useWsStore } from '../stores/ws'
 import { useVoiceStore } from '../stores/voice'
 import { useServersStore } from '../stores/servers'
 import { useActivityStore } from '../stores/activity'
+import { useScreenStore } from '../stores/screen'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -327,6 +345,9 @@ const ws = useWsStore()
 const voice = useVoiceStore()
 const serversStore = useServersStore()
 const activityStore = useActivityStore()
+const screenStore = useScreenStore()
+
+const showScreenPicker = ref(false)
 
 // Состояния модалок
 const showAddServer = ref(false)
@@ -825,6 +846,35 @@ function focusServers() {
 
 function focusGuilds() {
   // Фокусировать сайдбар гильдий
+}
+
+async function toggleScreenShare() {
+  if (screenStore.isSharing) {
+    await screenStore.stopShare()
+    if (guild.activeGuildId && voice.activeChannelId) {
+      ws.send({
+        op: 'SCREEN_SHARE_STATE_UPDATE',
+        d: { guild_id: guild.activeGuildId, channel_id: voice.activeChannelId, is_sharing: false },
+      })
+    }
+  } else {
+    showScreenPicker.value = true
+  }
+}
+
+function onScreenShareStarted() {
+  showScreenPicker.value = false
+  if (guild.activeGuildId && voice.activeChannelId) {
+    ws.send({
+      op: 'SCREEN_SHARE_STATE_UPDATE',
+      d: { guild_id: guild.activeGuildId, channel_id: voice.activeChannelId, is_sharing: true },
+    })
+  }
+}
+
+function getMemberUsername(userId: string): string {
+  const m = guild.members.find(m => m.user_id === userId)
+  return m?.nickname || m?.username || userId.slice(0, 8)
 }
 </script>
 

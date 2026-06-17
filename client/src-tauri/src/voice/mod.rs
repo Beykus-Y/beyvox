@@ -13,6 +13,8 @@ use livekit::{
         audio_source::native::NativeAudioSource,
         audio_stream::native::NativeAudioStream,
         prelude::{AudioSourceOptions, RtcAudioSource},
+        video_frame::VideoFormatType,
+        video_stream::native::NativeVideoStream,
     },
     Room, RoomEvent, RoomOptions,
 };
@@ -45,6 +47,12 @@ static PLAYBACK_GAIN: AtomicU32 = AtomicU32::new(1065353216);
 // Mic test streams (отдельные от голосовых)
 static TEST_CAPTURE: Mutex<Option<SendStream>> = Mutex::new(None);
 static TEST_PLAYBACK: Mutex<Option<SendStream>> = Mutex::new(None);
+
+// ─── Room accessor (для screen share модуля) ────────────────────────────────
+
+pub fn get_room() -> Option<Arc<Room>> {
+    ENGINE.lock().unwrap().as_ref().map(|e| e.room.clone())
+}
 
 // ─── Public Tauri commands ───────────────────────────────────────────────────
 
@@ -231,6 +239,12 @@ pub fn stop_mic_test() {
 }
 
 #[tauri::command]
+pub fn set_participant_volume(_user_id: String, _volume: f32) {
+    // Per-participant volume управляется на стороне JS (participantVolumes в voice store)
+    // Эта команда — заглушка для совместимости
+}
+
+#[tauri::command]
 pub fn set_mic_volume(percent: u32) {
     let gain = (percent as f32 / 100.0).clamp(0.0, 2.0);
     MIC_GAIN.store(gain.to_bits(), Ordering::Relaxed);
@@ -403,35 +417,71 @@ async fn handle_room_events(
     while let Some(event) = events.recv().await {
         match event {
             RoomEvent::TrackSubscribed { track, participant, .. } => {
-                if let livekit::track::RemoteTrack::Audio(audio_track) = track {
-                    let pid = participant.identity().to_string();
-                    let mixer = mixer.clone();
-                    tokio::spawn(async move {
-                        // LiveKit ресемплирует под наш sample rate
-                        let mut stream = NativeAudioStream::new(
-                            audio_track.rtc_track(),
-                            playback_rate as i32,
-                            1, // mono
-                        );
-                        // 80ms максимум в буфере воспроизведения на участника
-                        let max_remote_buf = playback_rate as usize * 80 / 1000;
-                        while let Some(frame) = stream.next().await {
-                            let samples: Vec<f32> = frame
-                                .data
-                                .iter()
-                                .map(|&s| s as f32 / i16::MAX as f32)
-                                .collect();
-                            let mut guard = mixer.lock().unwrap();
-                            let buf = guard.entry(pid.clone()).or_default();
-                            buf.extend(samples);
-                            // Дропаем старые данные если буфер переполнен
-                            if buf.len() > max_remote_buf {
-                                let excess = buf.len() - max_remote_buf;
-                                buf.drain(..excess);
+                match track {
+                    livekit::track::RemoteTrack::Audio(audio_track) => {
+                        let pid = participant.identity().to_string();
+                        let mixer = mixer.clone();
+                        tokio::spawn(async move {
+                            let mut stream = NativeAudioStream::new(
+                                audio_track.rtc_track(),
+                                playback_rate as i32,
+                                1,
+                            );
+                            let max_remote_buf = playback_rate as usize * 80 / 1000;
+                            while let Some(frame) = stream.next().await {
+                                let samples: Vec<f32> = frame
+                                    .data
+                                    .iter()
+                                    .map(|&s| s as f32 / i16::MAX as f32)
+                                    .collect();
+                                let mut guard = mixer.lock().unwrap();
+                                let buf = guard.entry(pid.clone()).or_default();
+                                buf.extend(samples);
+                                if buf.len() > max_remote_buf {
+                                    let excess = buf.len() - max_remote_buf;
+                                    buf.drain(..excess);
+                                }
                             }
-                        }
-                        mixer.lock().unwrap().remove(&pid);
-                    });
+                            mixer.lock().unwrap().remove(&pid);
+                        });
+                    }
+                    livekit::track::RemoteTrack::Video(video_track) => {
+                        let pid = participant.identity().to_string();
+                        let app = app.clone();
+                        tokio::spawn(async move {
+                            let mut stream = NativeVideoStream::new(video_track.rtc_track());
+                            let frame_interval = std::time::Duration::from_millis(100); // 10 fps viewer
+                            let mut last_emit = std::time::Instant::now()
+                                .checked_sub(frame_interval)
+                                .unwrap_or(std::time::Instant::now());
+                            while let Some(frame) = stream.next().await {
+                                let now = std::time::Instant::now();
+                                if now.duration_since(last_emit) < frame_interval {
+                                    continue;
+                                }
+                                last_emit = now;
+
+                                let w = frame.buffer.width();
+                                let h = frame.buffer.height();
+                                if w == 0 || h == 0 {
+                                    continue;
+                                }
+                                let mut rgba = vec![0u8; (w * h * 4) as usize];
+                                frame.buffer.to_argb(
+                                    VideoFormatType::RGBA,
+                                    &mut rgba,
+                                    w * 4,
+                                    w as i32,
+                                    h as i32,
+                                );
+
+                                if let Ok(jpeg) = crate::screen::encode_jpeg(&rgba, w, h, 60) {
+                                    let event_name = format!("screen://frame/{pid}");
+                                    let _ = app.emit(&event_name, jpeg);
+                                }
+                            }
+                        });
+                    }
                 }
             }
 

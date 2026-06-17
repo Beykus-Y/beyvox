@@ -1,5 +1,6 @@
 mod audio;
 mod effects;
+mod screen;
 mod voice;
 mod vst;
 
@@ -33,6 +34,10 @@ pub fn run() {
             voice::stop_mic_test,
             voice::set_mic_volume,
             voice::set_playback_volume,
+            screen::list_screens,
+            screen::start_screen_share,
+            screen::stop_screen_share,
+            voice::set_participant_volume,
             vst::load_vst_info,
             vst::open_vst_gui,
             effects::get_levels,

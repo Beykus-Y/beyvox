@@ -26,6 +26,21 @@
         @create-voice-channel="$emit('create-voice-channel')"
       />
 
+      <!-- Кнопка трансляции экрана (только в голосовом канале) -->
+      <div v-if="activeVoiceChannelId && canStream" class="screen-share-bar">
+        <button
+          class="screen-share-btn"
+          :class="{ active: screenStore.isSharing }"
+          @click="$emit('toggle-screen-share')"
+          :title="screenStore.isSharing ? 'Остановить трансляцию' : 'Поделиться экраном'"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/>
+          </svg>
+          {{ screenStore.isSharing ? 'Остановить' : 'Трансляция экрана' }}
+        </button>
+      </div>
+
       <!-- Разделитель -->
       <div class="column-divider" />
 
@@ -45,12 +60,19 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import GuildInfoCard from './GuildInfoCard.vue'
 import VoiceChannelsSection from '../voice/VoiceChannelsSection.vue'
 import ActivityFeed from './ActivityFeed.vue'
 import type { Guild, Channel, Member } from '../../stores/guild'
+import { useGuildStore, PERM } from '../../stores/guild'
 import type { VoiceState } from '../../stores/voice'
 import type { ActivityEvent } from '../../stores/activity'
+import { useScreenStore } from '../../stores/screen'
+
+const screenStore = useScreenStore()
+const guildStore = useGuildStore()
+const canStream = computed(() => guildStore.hasPermission(PERM.STREAM_SCREEN))
 
 defineProps<{
   guild: Guild | null
@@ -69,7 +91,8 @@ defineEmits([
   'open-guild-settings',
   'create-invite',
   'search',
-  'events'
+  'events',
+  'toggle-screen-share',
 ])
 </script>
 
@@ -113,6 +136,36 @@ defineEmits([
   flex: 1;
   text-align: center;
   color: var(--text-secondary);
+}
+
+.screen-share-bar {
+  padding: 2px 0;
+}
+
+.screen-share-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.screen-share-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+.screen-share-btn.active {
+  background: rgba(114, 137, 218, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .no-guild-info-hint {
