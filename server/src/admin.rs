@@ -474,7 +474,7 @@ pub struct GuildSummary {
 pub async fn discovery(State(state): State<AppState>) -> AppResult<Json<DiscoveryResponse>> {
     // Суммарное число участников по всем гильдиям
     let total_members: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(cnt), 0) FROM (
+        "SELECT COALESCE(SUM(cnt), 0)::bigint FROM (
              SELECT COUNT(m.user_id) as cnt
              FROM guilds g
              LEFT JOIN members m ON m.guild_id = g.id AND m.is_banned = false

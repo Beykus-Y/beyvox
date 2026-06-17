@@ -56,15 +56,16 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/refresh", post(auth::handlers::refresh))
         .route("/auth/verify", get(auth::handlers::verify_email))
         .route("/auth/status", get(auth::handlers::status))
-        .route("/.well-known/jwks.json", get(auth::handlers::jwks))
         .route("/servers", get(catalog::handlers::list_servers))
         .route("/servers", post(catalog::handlers::register_server))
         .route("/servers/:id/ping", post(catalog::handlers::ping_server))
-        .with_state(state);
+        .with_state(state.clone());
 
     let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "static".into());
     let app = Router::new()
         .nest("/api", api)
+        // JWKS на корне — стандартный путь, нужен серверам для верификации JWT
+        .route("/.well-known/jwks.json", get(auth::handlers::jwks).with_state(state))
         .fallback_service(
             ServeDir::new(&static_dir)
                 .fallback(ServeFile::new(format!("{static_dir}/index.html")))
