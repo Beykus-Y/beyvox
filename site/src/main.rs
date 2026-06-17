@@ -48,6 +48,8 @@ async fn main() -> anyhow::Result<()> {
         jwt: Arc::new(jwt),
     };
 
+    catalog::puller::spawn(state.clone());
+
     let api = Router::new()
         .route("/auth/register", post(auth::handlers::register))
         .route("/auth/login", post(auth::handlers::login))

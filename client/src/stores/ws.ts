@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useAuthStore } from './auth'
 import { useGuildStore } from './guild'
 import { useVoiceStore } from './voice'
+import { useActivityStore } from './activity'
 
 type WsStatus = 'disconnected' | 'connecting' | 'connected'
 
@@ -48,6 +49,7 @@ export const useWsStore = defineStore('ws', () => {
     const guild = useGuildStore()
     const voice = useVoiceStore()
     const auth = useAuthStore()
+    const activity = useActivityStore()
 
     switch (event.op) {
       case 'HELLO':
@@ -61,13 +63,21 @@ export const useWsStore = defineStore('ws', () => {
         guild.setGuilds(event.d.guilds)
         break
 
-      case 'MESSAGE_CREATE':
+      case 'MESSAGE_CREATE': {
         guild.addMessage(event.d.message)
         // Уведомление если нас упомянули в другом канале
         if (event.d.message.mention_user_ids?.includes(auth.userId)) {
           guild.markMention(event.d.message.channel_id)
         }
+        // Добавление в ленту активностей
+        const ch = guild.channels.find(c => c.id === event.d.message.channel_id)
+        activity.addEvent({
+          type: 'message_sent',
+          actor: { id: event.d.message.author_id, username: event.d.message.author_username },
+          targetLabel: ch ? '#' + ch.name : 'чат'
+        })
         break
+      }
 
       case 'MESSAGE_UPDATE':
         guild.updateMessage(event.d.message_id, event.d.content, event.d.edited_at)
@@ -77,9 +87,15 @@ export const useWsStore = defineStore('ws', () => {
         guild.deleteMessage(event.d.message_id)
         break
 
-      case 'CHANNEL_CREATE':
+      case 'CHANNEL_CREATE': {
         guild.addChannel(event.d.channel)
+        activity.addEvent({
+          type: 'channel_created',
+          actor: { id: 'system', username: 'Система' },
+          targetLabel: '#' + event.d.channel.name
+        })
         break
+      }
 
       case 'CHANNEL_DELETE':
         guild.removeChannel(event.d.channel_id)
@@ -93,9 +109,24 @@ export const useWsStore = defineStore('ws', () => {
         guild.handleReactionRemove(event.d)
         break
 
-      case 'VOICE_STATE_UPDATE':
+      case 'VOICE_STATE_UPDATE': {
+        const prevVoiceState = voice.voiceStates.get(event.d.user_id)
+        const channelChanged = prevVoiceState?.channel_id !== event.d.channel_id
+        
         voice.updateVoiceState(event.d)
+        
+        if (channelChanged && event.d.channel_id) {
+          const member = guild.members.find(m => m.user_id === event.d.user_id)
+          const name = member?.nickname || member?.username || event.d.user_id.slice(0, 8)
+          const ch = guild.channels.find(c => c.id === event.d.channel_id)
+          activity.addEvent({
+            type: 'voice_joined',
+            actor: { id: event.d.user_id, username: name },
+            targetLabel: ch ? '🔊 ' + ch.name : 'Голос'
+          })
+        }
         break
+      }
 
       case 'VOICE_SERVER_UPDATE':
         voice.connectToLiveKit(event.d.livekit_url, event.d.token)

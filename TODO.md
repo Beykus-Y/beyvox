@@ -22,7 +22,13 @@ Roadmap без дедлайнов. Делаем этап за этапом, не
 - [x] `beyvox-client`: скелет Tauri + Vue 3 + Vite проекта
 - [x] `beyvox-client`: экран логина / регистрации
 - [x] `beyvox-client`: главный layout (сайдбар серверов, список каналов, основная область)
-- [ ] `beyvox-client`: просмотр каталога публичных серверов
+- [ ] `beyvox-client`: просмотр каталога публичных серверов (включая guilds из central)
+- [x] `beyvox-server`: is_default / is_public флаги на гильдиях, auto-join в default при вступлении
+- [x] `beyvox-server`: setup endpoint (первый запуск — создание admin + default guild)
+- [x] `beyvox-server`: admin panel (`/admin`) — управление гильдиями, участниками
+- [x] `beyvox-server`: `GET /api/discovery` — публичный endpoint для central pull
+- [x] `beyvox-central`: pull loop (каждые 5 мин опрашивает серверы, сохраняет guild snapshots)
+- [x] `beyvox-central`: `GET /servers` возвращает guilds в ответе
 - [x] `beyvox-client`: подключение к серверу по прямому IP/домену
 
 ---

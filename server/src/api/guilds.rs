@@ -13,12 +13,15 @@ pub struct GuildDto {
     pub icon_url: Option<String>,
     pub owner_id: Uuid,
     pub member_count: i64,
+    pub is_default: bool,
+    pub is_public: bool,
 }
 
 #[derive(Deserialize)]
 pub struct CreateGuildRequest {
     pub name: String,
     pub description: Option<String>,
+    pub is_public: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -42,9 +45,12 @@ pub async fn get_guild(
     Path(guild_id): Path<Uuid>,
 ) -> AppResult<Json<GuildDto>> {
     ensure_member(&state, user.user_id, guild_id).await?;
+    fetch_guild_dto(&state, guild_id).await.map(Json)
+}
 
+async fn fetch_guild_dto(state: &AppState, guild_id: Uuid) -> AppResult<GuildDto> {
     let row = sqlx::query(
-        "SELECT g.id, g.name, g.description, g.icon_url, g.owner_id,
+        "SELECT g.id, g.name, g.description, g.icon_url, g.owner_id, g.is_default, g.is_public,
                 COUNT(m.user_id) as member_count
          FROM guilds g
          LEFT JOIN members m ON m.guild_id = g.id AND m.is_banned = false
@@ -56,14 +62,16 @@ pub async fn get_guild(
     .await?
     .ok_or(AppError::NotFound)?;
 
-    Ok(Json(GuildDto {
+    Ok(GuildDto {
         id: row.get("id"),
         name: row.get("name"),
         description: row.get("description"),
         icon_url: row.get("icon_url"),
         owner_id: row.get("owner_id"),
         member_count: row.get("member_count"),
-    }))
+        is_default: row.get("is_default"),
+        is_public: row.get("is_public"),
+    })
 }
 
 pub async fn create_guild(
@@ -80,19 +88,28 @@ pub async fn create_guild(
     }
 
     let guild_id = Uuid::new_v4();
+    let is_public = body.is_public.unwrap_or(true);
+
+    // Первая гильдия на сервере становится дефолтной
+    let existing: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM guilds")
+        .fetch_one(&state.db)
+        .await?;
+    let is_default = existing == 0;
 
     sqlx::query(
-        "INSERT INTO guilds (id, name, description, owner_id) VALUES ($1, $2, $3, $4)",
+        "INSERT INTO guilds (id, name, description, owner_id, is_default, is_public)
+         VALUES ($1, $2, $3, $4, $5, $6)",
     )
     .bind(guild_id)
     .bind(&body.name)
     .bind(&body.description)
     .bind(user.user_id)
+    .bind(is_default)
+    .bind(is_public)
     .execute(&state.db)
     .await?;
 
-    // Создаём роль @everyone с базовыми правами
-    let everyone_perms: i64 = 16 | 32 | 64; // SEND_MESSAGES | ATTACH_FILES | CONNECT_VOICE
+    let everyone_perms: i64 = 16 | 32 | 64;
     sqlx::query(
         "INSERT INTO roles (guild_id, name, position, permissions) VALUES ($1, '@everyone', 0, $2)",
     )
@@ -101,7 +118,6 @@ pub async fn create_guild(
     .execute(&state.db)
     .await?;
 
-    // Добавляем создателя как участника
     sqlx::query("INSERT INTO members (user_id, guild_id, username) VALUES ($1, $2, $3)")
         .bind(user.user_id)
         .bind(guild_id)
@@ -109,7 +125,6 @@ pub async fn create_guild(
         .execute(&state.db)
         .await?;
 
-    // Создаём канал #general по умолчанию
     sqlx::query(
         "INSERT INTO channels (guild_id, name, type, position) VALUES ($1, 'general', 'text', 0)",
     )
@@ -124,7 +139,67 @@ pub async fn create_guild(
         icon_url: None,
         owner_id: user.user_id,
         member_count: 1,
+        is_default,
+        is_public,
     }))
+}
+
+pub async fn delete_guild(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path(guild_id): Path<Uuid>,
+) -> AppResult<Json<serde_json::Value>> {
+    let row = sqlx::query(
+        "SELECT owner_id, is_default FROM guilds WHERE id = $1",
+    )
+    .bind(guild_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    let owner_id: Uuid = row.get("owner_id");
+    let is_default: bool = row.get("is_default");
+
+    if owner_id != user.user_id {
+        return Err(AppError::Forbidden);
+    }
+    if is_default {
+        return Err(AppError::BadRequest(
+            "cannot delete default guild — set another guild as default first".into(),
+        ));
+    }
+
+    sqlx::query("DELETE FROM guilds WHERE id = $1")
+        .bind(guild_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn set_default_guild(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path(guild_id): Path<Uuid>,
+) -> AppResult<Json<serde_json::Value>> {
+    let row = sqlx::query("SELECT owner_id, is_public FROM guilds WHERE id = $1")
+        .bind(guild_id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let owner_id: Uuid = row.get("owner_id");
+    if owner_id != user.user_id {
+        return Err(AppError::Forbidden);
+    }
+
+    // Атомарно: снять is_default со всех, поставить на одну
+    sqlx::query("UPDATE guilds SET is_default = (id = $1)")
+        .bind(guild_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 pub async fn create_invite(
@@ -184,7 +259,6 @@ pub async fn join_by_invite(
         }
     }
 
-    // Проверяем текущий статус пользователя в гильдии до любых изменений в БД
     let existing = sqlx::query(
         "SELECT is_banned FROM members WHERE user_id = $1 AND guild_id = $2",
     )
@@ -197,11 +271,9 @@ pub async fn join_by_invite(
         if row.get::<bool, _>("is_banned") {
             return Err(AppError::Forbidden);
         }
-        // Уже участник — возвращаем гильдию без записи в members и без расхода инвайта
-        return get_guild(State(state), user, Path(guild_id)).await;
+        return fetch_guild_dto(&state, guild_id).await.map(Json);
     }
 
-    // Новый участник: добавляем в members и инкрементируем счётчик
     sqlx::query(
         "INSERT INTO members (user_id, guild_id, username) VALUES ($1, $2, $3)",
     )
@@ -216,7 +288,38 @@ pub async fn join_by_invite(
         .execute(&state.db)
         .await?;
 
-    get_guild(State(state), user, Path(guild_id)).await
+    // Auto-join в дефолтную гильдию если пользователь вступает в другую
+    let default_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM guilds WHERE is_default = true LIMIT 1",
+    )
+    .fetch_optional(&state.db)
+    .await?;
+
+    if let Some(default_id) = default_id {
+        if default_id != guild_id {
+            let already = sqlx::query(
+                "SELECT 1 FROM members WHERE user_id = $1 AND guild_id = $2",
+            )
+            .bind(user.user_id)
+            .bind(default_id)
+            .fetch_optional(&state.db)
+            .await?;
+
+            if already.is_none() {
+                let _ = sqlx::query(
+                    "INSERT INTO members (user_id, guild_id, username) VALUES ($1, $2, $3)
+                     ON CONFLICT DO NOTHING",
+                )
+                .bind(user.user_id)
+                .bind(default_id)
+                .bind(&user.username)
+                .execute(&state.db)
+                .await;
+            }
+        }
+    }
+
+    fetch_guild_dto(&state, guild_id).await.map(Json)
 }
 
 pub async fn ensure_member(state: &AppState, user_id: Uuid, guild_id: Uuid) -> AppResult<()> {

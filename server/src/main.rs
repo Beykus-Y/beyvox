@@ -1,3 +1,4 @@
+mod admin;
 mod api;
 mod auth;
 mod config;
@@ -31,7 +32,6 @@ pub struct AppState {
     /// Активные WebSocket соединения: user_id → sender
     pub connections: Arc<DashMap<Uuid, ClientSender>>,
 }
-
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -75,7 +75,6 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("══════════════════════════════════════");
 
     let info_name = config.server_name.clone();
-    let info_token_required = true;
 
     let app = Router::new()
         .route("/", get(|| async { axum::Json(serde_json::json!({ "status": "ok" })) }))
@@ -88,16 +87,30 @@ async fn main() -> anyhow::Result<()> {
                     axum::Json(serde_json::json!({
                         "name": n,
                         "version": env!("CARGO_PKG_VERSION"),
-                        "requires_owner_token": info_token_required,
                     }))
                 }
             }
         }))
+        // Setup (только при первом запуске)
+        .route("/setup", get(admin::setup_page).post(admin::setup_submit))
+        // Admin panel
+        .route("/admin/login", get(admin::login_page).post(admin::login_submit))
+        .route("/admin/logout", post(admin::logout))
+        .route("/admin", get(admin::dashboard_page))
+        .route("/admin/api/guilds", get(admin::admin_list_guilds))
+        .route("/admin/api/guilds/:id/set-default", post(admin::admin_set_default))
+        .route("/admin/api/guilds/:id", delete(admin::admin_delete_guild))
+        .route("/admin/api/guilds/:id/members", get(admin::admin_list_members))
+        .route("/admin/api/guilds/:gid/members/:uid/kick", post(admin::admin_kick_member))
+        .route("/admin/api/guilds/:gid/members/:uid/ban", post(admin::admin_ban_member))
+        // Discovery (для central pull)
+        .route("/api/discovery", get(admin::discovery))
         // WebSocket
         .route("/ws", get(ws::handler::ws_handler))
         // Guilds
         .route("/guilds", post(api::guilds::create_guild))
-        .route("/guilds/:id", get(api::guilds::get_guild))
+        .route("/guilds/:id", get(api::guilds::get_guild).delete(api::guilds::delete_guild))
+        .route("/guilds/:id/set-default", post(api::guilds::set_default_guild))
         .route("/guilds/:id/invites", post(api::guilds::create_invite))
         .route("/invites/:code/join", post(api::guilds::join_by_invite))
         // Channels

@@ -26,6 +26,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "1"
 anyhow = "1"
 rand = "0.8"
+argon2 = "0.5"
 
 # WebSocket state management
 dashmap = "6"

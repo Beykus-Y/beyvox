@@ -10,6 +10,7 @@ export interface Channel {
   type: 'text' | 'voice'
   position: number
   user_limit?: number
+  description?: string
 }
 
 export interface Guild {
@@ -145,6 +146,16 @@ export const useGuildStore = defineStore('guild', () => {
     })
   }
 
+  async function editMessage(guildId: string, channelId: string, messageId: string, content: string) {
+    await apiClient().patch(`/guilds/${guildId}/channels/${channelId}/messages/${messageId}`, {
+      content,
+    })
+  }
+
+  async function removeMessageFromServer(guildId: string, channelId: string, messageId: string) {
+    await apiClient().delete(`/guilds/${guildId}/channels/${channelId}/messages/${messageId}`)
+  }
+
   async function addReaction(guildId: string, channelId: string, messageId: string, emoji: string) {
     await apiClient().put(
       `/guilds/${guildId}/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`
@@ -257,7 +268,7 @@ export const useGuildStore = defineStore('guild', () => {
     guilds, activeGuildId, activeChannelId, channels, messages, members, serverUrl,
     mentionedChannels,
     connectToServer, createGuild, createChannel, joinByInvite, createInvite, reset,
-    loadChannels, loadMessages, loadMoreMessages, sendMessage, loadMembers,
+    loadChannels, loadMessages, loadMoreMessages, sendMessage, editMessage, removeMessageFromServer, loadMembers,
     addReaction, removeReaction,
     addMessage, updateMessage, deleteMessage, addChannel, removeChannel, setGuilds,
     handleReactionAdd, handleReactionRemove, markMention, clearMention,

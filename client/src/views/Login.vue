@@ -2,25 +2,26 @@
   <div class="login-page">
     <div class="login-glow" />
     
+    <!-- Экран подтверждения почты -->
     <div v-if="showVerify" class="login-box">
       <div class="logo">
         <div class="logo-icon">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/>
           </svg>
         </div>
-        <span class="logo-text">Проверь почту</span>
+        <span class="logo-text">Проверьте почту</span>
       </div>
-      <p class="subtitle" style="line-height: 1.5; margin-bottom: 24px;">
-        Мы отправили письмо на почту <strong style="color: var(--text);">{{ form.email }}</strong> с ссылкой для подтверждения.
+      <p class="subtitle">
+        Мы отправили письмо на почту <strong class="highlight-email">{{ form.email }}</strong> с ссылкой для подтверждения аккаунта.
       </p>
 
-      <p v-if="error" class="error" style="margin-bottom: 14px;">{{ error }}</p>
+      <p v-if="error" class="error-banner">{{ error }}</p>
       
-      <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div class="action-buttons-group">
         <button class="submit-btn" :disabled="loading" @click="checkEmailVerified">
-          <span v-if="loading" class="spinner" />
-          {{ loading ? 'Проверяем...' : 'Я подтвердил почту' }}
+          <span v-if="loading" class="spinner-sm" />
+          {{ loading ? 'Проверка...' : 'Я подтвердил почту' }}
         </button>
         <button class="btn-ghost-action" @click="enterApp">
           Подтвердить позже
@@ -28,10 +29,11 @@
       </div>
     </div>
 
+    <!-- Основной экран входа / регистрации -->
     <div v-else class="login-box">
       <div class="logo">
         <div class="logo-icon">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 3a9 9 0 0 1 9 9 9 9 0 0 1-9 9 9 9 0 0 1-9-9 9 9 0 0 1 9-9m0 2a7 7 0 0 0-7 7 7 7 0 0 0 7 7 7 7 0 0 0 7-7 7 7 0 0 0-7-7m0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11M9.5 8v4.75l4 2.25.75-1.23-3.25-1.88V8H9.5z"/>
           </svg>
         </div>
@@ -39,34 +41,67 @@
       </div>
       <p class="subtitle">Голосовой мессенджер под твоим контролем</p>
 
+      <!-- Переключатель вкладок -->
       <div class="tabs">
-        <button :class="{ active: mode === 'login' }" @click="mode = 'login'">Войти</button>
-        <button :class="{ active: mode === 'register' }" @click="mode = 'register'">Регистрация</button>
+        <button :class="{ active: mode === 'login' }" @click="setMode('login')">Войти</button>
+        <button :class="{ active: mode === 'register' }" @click="setMode('register')">Регистрация</button>
       </div>
 
       <form @submit.prevent="submit">
-
-
+        <!-- Поле логина -->
         <div class="field">
-          <label>{{ mode === 'login' ? 'Логин или Email' : 'Логин' }}</label>
-          <input v-model="form.login" type="text" required autocomplete="username" />
+          <label class="uppercase-label">{{ mode === 'login' ? 'Логин или Email' : 'Логин' }}</label>
+          <input
+            v-model="form.login"
+            type="text"
+            required
+            autocomplete="username"
+            placeholder="Введите ваше имя пользователя"
+          />
         </div>
 
+        <!-- Поле почты для регистрации -->
         <div v-if="mode === 'register'" class="field">
-          <label>Email</label>
-          <input v-model="form.email" type="email" required />
+          <label class="uppercase-label">Email адрес</label>
+          <input
+            v-model="form.email"
+            type="email"
+            required
+            placeholder="example@mail.com"
+          />
         </div>
 
+        <!-- Поле пароля -->
         <div class="field">
-          <label>Пароль</label>
-          <input v-model="form.password" type="password" required autocomplete="current-password" />
+          <label class="uppercase-label">Пароль</label>
+          <div class="password-wrapper">
+            <input
+              v-model="form.password"
+              :type="showPassword ? 'text' : 'password'"
+              required
+              autocomplete="current-password"
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              class="password-toggle-btn"
+              @click="showPassword = !showPassword"
+              tabindex="-1"
+              :title="showPassword ? 'Скрыть пароль' : 'Показать пароль'"
+            >
+              <span v-if="showPassword">👁️</span>
+              <span v-else>🙈</span>
+            </button>
+          </div>
         </div>
 
-        <p v-if="error" class="error">{{ error }}</p>
+        <!-- Баннер ошибки -->
+        <p v-if="error" class="error-banner">{{ error }}</p>
 
-        <button type="submit" class="submit-btn" :disabled="loading">
-          <span v-if="loading" class="spinner" />
-          {{ loading ? 'Подождите...' : (mode === 'login' ? 'Войти' : 'Создать аккаунт') }}
+        <!-- Кнопка действия -->
+        <button type="submit" class="submit-btn" :disabled="loading || !isFormValid">
+          <span v-if="loading" class="spinner-sm" />
+          <span>{{ loading ? 'Пожалуйста, подождите...' : (mode === 'login' ? 'Войти' : 'Создать аккаунт') }}</span>
         </button>
       </form>
     </div>
@@ -74,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
@@ -85,9 +120,22 @@ const mode = ref<'login' | 'register'>('login')
 const loading = ref(false)
 const error = ref('')
 const showVerify = ref(false)
+const showPassword = ref(false)
 const form = ref({ login: '', email: '', password: '' })
 
+const isFormValid = computed(() => {
+  if (!form.value.login.trim() || !form.value.password) return false
+  if (mode.value === 'register' && !form.value.email.trim()) return false
+  return true
+})
+
+function setMode(newMode: 'login' | 'register') {
+  mode.value = newMode
+  error.value = ''
+}
+
 async function submit() {
+  if (!isFormValid.value) return
   error.value = ''
   loading.value = true
   try {
@@ -101,14 +149,15 @@ async function submit() {
   } catch (e: any) {
     const status = e?.response?.status
     const msg = e?.response?.data?.error
+    
     if (mode.value === 'login' && status === 401) {
       error.value = 'Неверный логин или пароль'
     } else if (status === 409) {
       error.value = msg === 'username already taken' ? 'Этот ник уже занят' : 'Этот email уже зарегистрирован'
     } else if (status === 400) {
-      error.value = msg || 'Проверь введённые данные'
+      error.value = msg || 'Некорректный логин, пароль или email'
     } else {
-      error.value = 'Ошибка подключения'
+      error.value = 'Ошибка сетевого соединения с сервером авторизации'
     }
   } finally {
     loading.value = false
@@ -130,7 +179,7 @@ async function checkEmailVerified() {
       error.value = 'Почта ещё не подтверждена. Пожалуйста, перейдите по ссылке в письме.'
     }
   } catch (e: any) {
-    error.value = e?.response?.data?.error || 'Не удалось проверить статус подтверждения'
+    error.value = e?.response?.data?.error || 'Не удалось связаться с сервером верификации'
   } finally {
     loading.value = false
   }
@@ -138,117 +187,146 @@ async function checkEmailVerified() {
 </script>
 
 <style scoped>
-.btn-ghost-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-  background: transparent;
-  color: var(--text2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.btn-ghost-action:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
 .login-page {
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-darkest);
+  background: var(--bg-app);
   position: relative;
   overflow: hidden;
 }
 
 .login-glow {
   position: absolute;
-  width: 500px;
-  height: 500px;
+  width: 600px;
+  height: 600px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(91, 124, 246, 0.12) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(124, 108, 255, 0.08) 0%, transparent 70%);
   pointer-events: none;
 }
 
 .login-box {
-  width: 420px;
-  background: var(--bg-dark);
+  width: 400px;
+  background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 40px;
+  border-radius: var(--radius-card);
+  padding: 36px;
   position: relative;
   z-index: 1;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
 }
 
 .logo {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .logo-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent), #a78bfa);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-squircle);
+  background: var(--accent-grad);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(124, 108, 255, 0.25);
 }
 
 .logo-text {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--accent), #a78bfa);
+  background: var(--accent-grad);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-.subtitle { color: var(--text2); font-size: 13px; margin-bottom: 28px; }
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 24px;
+  line-height: 1.45;
+}
 
+.highlight-email {
+  color: var(--text-primary);
+}
+
+/* Табы авторизации */
 .tabs {
   display: flex;
-  background: var(--bg);
-  border-radius: 8px;
+  background: var(--bg-app);
+  border-radius: var(--radius-item);
   padding: 3px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
 }
 .tabs button {
   flex: 1;
   padding: 8px;
   border-radius: 6px;
   background: transparent;
-  color: var(--text2);
+  color: var(--text-muted);
+  font-weight: 500;
   transition: all 0.15s;
 }
+.tabs button:hover:not(.active) {
+  color: var(--text-secondary);
+}
 .tabs button.active {
-  background: var(--bg-dark);
-  color: var(--text);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   font-weight: 600;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-form { display: flex; flex-direction: column; gap: 14px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 
-.error {
-  color: var(--red);
-  font-size: 13px;
-  background: rgba(255, 85, 85, 0.1);
-  padding: 8px 12px;
-  border-radius: 6px;
-  border-left: 3px solid var(--red);
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.password-wrapper input {
+  padding-right: 40px;
+  width: 100%;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Ошибки */
+.error-banner {
+  color: var(--danger);
+  font-size: 12.5px;
+  background: rgba(239, 68, 68, 0.08);
+  padding: 10px 12px;
+  border-radius: var(--radius-item);
+  border-left: 3px solid var(--danger);
 }
 
 .submit-btn {
@@ -257,26 +335,64 @@ form { display: flex; flex-direction: column; gap: 14px; }
   justify-content: center;
   gap: 8px;
   padding: 12px;
-  background: linear-gradient(135deg, var(--accent), #7c6cf7);
+  background: var(--accent-grad);
   color: white;
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   font-size: 14px;
   font-weight: 600;
-  margin-top: 4px;
-  transition: opacity 0.15s, transform 0.1s;
+  margin-top: 6px;
+  box-shadow: 0 4px 14px rgba(124, 108, 255, 0.25);
 }
-.submit-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-.submit-btn:active { transform: translateY(0); }
-.submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.submit-btn:hover:not(:disabled) {
+  opacity: 0.95;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(124, 108, 255, 0.35);
+}
+.submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+.submit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--border);
+  color: var(--text-muted);
+  box-shadow: none;
+}
 
-.spinner {
+.action-buttons-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-ghost-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-item);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.btn-ghost-action:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Спиннер */
+.spinner-sm {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255,255,255,0.3);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   border-top-color: white;
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  flex-shrink: 0;
+  animation: spin 0.6s linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 </style>
