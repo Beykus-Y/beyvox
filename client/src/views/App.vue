@@ -92,12 +92,82 @@
 
     <!-- Модалка: добавить сервер -->
     <div v-if="showAddServer" class="modal-overlay" @click.self="closeAddServer">
-      <div class="modal add-server-modal">
-        <h3>Подключиться к серверу</h3>
+      <!-- Выбор режима -->
+      <div v-if="addServerMode === 'choose'" class="modal">
+        <h3>Добавить сервер</h3>
+        <div class="add-server-options">
+          <button class="add-option-card" @click="openBrowse">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            <span class="add-option-title">Публичные серверы</span>
+            <span class="add-option-desc">Найти сервер в каталоге BeyVox</span>
+          </button>
+          <button class="add-option-card" @click="addServerMode = 'direct'">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+            <span class="add-option-title">Прямое подключение</span>
+            <span class="add-option-desc">Ввести адрес сервера вручную</span>
+          </button>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="closeAddServer">Отмена</button>
+        </div>
+      </div>
+
+      <!-- Обзор публичных серверов -->
+      <div v-else-if="addServerMode === 'browse'" class="modal modal-wide">
+        <div class="modal-top">
+          <button class="btn-back" @click="addServerMode = 'choose'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          </button>
+          <h3>Публичные серверы</h3>
+        </div>
+        <div v-if="publicLoading" class="browse-state">Загрузка...</div>
+        <div v-else-if="publicError" class="browse-state error">{{ publicError }}</div>
+        <div v-else-if="publicServers.length === 0" class="browse-state">Серверов не найдено</div>
+        <div v-else class="public-server-list">
+          <div v-for="s in publicServers" :key="s.id" class="public-server-card">
+            <div class="ps-icon">
+              <img v-if="s.icon_url" :src="s.icon_url" :alt="s.name" />
+              <div v-else class="ps-icon-placeholder">{{ s.name[0].toUpperCase() }}</div>
+            </div>
+            <div class="ps-info">
+              <div class="ps-name">{{ s.name }}</div>
+              <div class="ps-desc">{{ s.description || 'Нет описания' }}</div>
+              <div class="ps-meta">
+                <span class="ps-online">{{ s.online_count }} онлайн</span>
+                <span v-for="t in s.tags" :key="t" class="tag">{{ t }}</span>
+              </div>
+              <div v-if="s.guilds.length" class="ps-guilds">
+                <span v-for="g in s.guilds" :key="g.guild_id" class="ps-guild-chip">
+                  {{ g.name }}
+                  <span v-if="g.is_default" class="ps-guild-default">●</span>
+                  <span class="ps-guild-count">{{ g.member_count }}</span>
+                </span>
+              </div>
+            </div>
+            <button
+              class="btn-primary ps-connect-btn"
+              :disabled="serverLoading"
+              @click="connectToPublicServer(s.address)"
+            >
+              {{ serverLoading ? '...' : 'Подключиться' }}
+            </button>
+          </div>
+        </div>
+        <p v-if="serverError" class="modal-error">{{ serverError }}</p>
+      </div>
+
+      <!-- Прямое подключение -->
+      <div v-else-if="addServerMode === 'direct'" class="modal">
+        <div class="modal-top">
+          <button class="btn-back" @click="addServerMode = 'choose'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          </button>
+          <h3>Прямое подключение</h3>
+        </div>
         <p class="modal-hint">Введите адрес инстанса BeyVox-сервера</p>
         <input
           v-model="serverUrlInput"
-          placeholder="http://localhost:8080"
+          placeholder="https://server.example.com"
           @keydown.enter="connectServer"
           autofocus
         />
@@ -240,6 +310,7 @@ import ChatColumn from '../components/chat/ChatColumn.vue'
 import InfoColumn from '../components/layout/InfoColumn.vue'
 import SettingsModal from '../components/settings/SettingsModal.vue'
 
+import { fetchPublicServers, type PublicServer } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useGuildStore, type Guild } from '../stores/guild'
 import { useWsStore } from '../stores/ws'
@@ -257,6 +328,10 @@ const activityStore = useActivityStore()
 
 // Состояния модалок
 const showAddServer = ref(false)
+const addServerMode = ref<'choose' | 'browse' | 'direct'>('choose')
+const publicServers = ref<PublicServer[]>([])
+const publicLoading = ref(false)
+const publicError = ref('')
 const showCreateGuild = ref(false)
 const showInvite = ref(false)
 const showCreateInvite = ref(false)
@@ -397,12 +472,50 @@ function disconnectServer(url: string) {
 function openAddServer() {
   serverUrlInput.value = ''
   serverError.value = ''
+  addServerMode.value = 'choose'
   showAddServer.value = true
 }
 
 function closeAddServer() {
   showAddServer.value = false
   serverError.value = ''
+}
+
+async function openBrowse() {
+  addServerMode.value = 'browse'
+  publicServers.value = []
+  publicError.value = ''
+  publicLoading.value = true
+  try {
+    publicServers.value = await fetchPublicServers()
+  } catch (e: any) {
+    publicError.value = e?.message || 'Ошибка загрузки'
+  } finally {
+    publicLoading.value = false
+  }
+}
+
+async function connectToPublicServer(address: string) {
+  const url = address.startsWith('http') ? address : `https://${address}`
+  serverError.value = ''
+  serverLoading.value = true
+  try {
+    const server = await serversStore.addServer(url)
+    await switchServer(server.url)
+    await new Promise<void>((resolve, reject) => {
+      const start = Date.now()
+      const id = setInterval(() => {
+        if (ws.status === 'connected') { clearInterval(id); resolve() }
+        if (Date.now() - start > 6000) { clearInterval(id); reject(new Error('Превышено время ожидания')) }
+      }, 150)
+    })
+    closeAddServer()
+  } catch (e: any) {
+    serverError.value = e?.message || 'Ошибка подключения'
+    serversStore.removeServer(url.replace(/\/$/, ''))
+  } finally {
+    serverLoading.value = false
+  }
 }
 
 async function connectServer() {
@@ -916,6 +1029,141 @@ function focusGuilds() {
 .btn-secondary:hover {
   background: var(--bg-active);
 }
+
+/* Модалка добавления сервера */
+.modal-wide {
+  width: 540px;
+}
+
+.modal-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-back {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.btn-back:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.add-server-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.add-option-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-app);
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: border-color 0.15s, background 0.15s;
+}
+.add-option-card:hover {
+  border-color: var(--accent);
+  background: rgba(124, 108, 255, 0.05);
+}
+.add-option-card svg { color: var(--accent); margin-bottom: 4px; }
+.add-option-title { font-weight: 700; font-size: 14px; }
+.add-option-desc { font-size: 12px; color: var(--text-secondary); }
+
+/* Список публичных серверов */
+.public-server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.public-server-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-app);
+}
+
+.ps-icon { flex-shrink: 0; }
+.ps-icon img, .ps-icon-placeholder {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+.ps-icon-placeholder {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.ps-info { flex: 1; min-width: 0; }
+.ps-name { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+.ps-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ps-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.ps-online { font-size: 11px; color: var(--green); font-weight: 500; }
+.tag {
+  font-size: 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--text-secondary);
+}
+
+.ps-guilds { display: flex; flex-wrap: wrap; gap: 4px; }
+.ps-guild-chip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  background: rgba(124, 108, 255, 0.1);
+  border: 1px solid rgba(124, 108, 255, 0.2);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--accent);
+}
+.ps-guild-default { color: var(--green); font-size: 8px; }
+.ps-guild-count { color: var(--text-muted); font-size: 10px; }
+
+.ps-connect-btn { flex-shrink: 0; padding: 6px 14px; font-size: 13px; }
+
+.browse-state {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.browse-state.error { color: var(--danger); }
 
 /* CPAL мик баннер ошибки */
 .mic-error-banner {

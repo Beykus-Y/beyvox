@@ -44,3 +44,30 @@ export const serverApi = (serverUrl: string) =>
       Authorization: `Bearer ${localStorage.getItem('access_token')}`,
     },
   })
+
+const CENTRAL_URL = import.meta.env.VITE_CENTRAL_URL || 'https://beyvox.beykus.fun'
+
+export interface PublicGuild {
+  guild_id: string
+  name: string
+  description: string | null
+  member_count: number
+  is_default: boolean
+}
+
+export interface PublicServer {
+  id: string
+  name: string
+  description: string | null
+  icon_url: string | null
+  address: string
+  tags: string[]
+  online_count: number
+  guilds: PublicGuild[]
+}
+
+export async function fetchPublicServers(): Promise<PublicServer[]> {
+  const res = await fetch(`${CENTRAL_URL}/api/servers`)
+  if (!res.ok) throw new Error('Не удалось загрузить список серверов')
+  return res.json()
+}
