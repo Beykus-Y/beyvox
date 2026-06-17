@@ -184,6 +184,7 @@ pub struct GuildSummary {
     pub id: Uuid,
     pub name: String,
     pub icon_url: Option<String>,
+    pub owner_id: Uuid,
 }
 
 #[derive(Serialize, Clone, Debug)]

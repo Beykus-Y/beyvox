@@ -306,7 +306,7 @@ async fn identify(
 
     // Получаем гильдии пользователя
     let rows = sqlx::query(
-        "SELECT g.id, g.name, g.icon_url FROM guilds g
+        "SELECT g.id, g.name, g.icon_url, g.owner_id FROM guilds g
          JOIN members m ON m.guild_id = g.id
          WHERE m.user_id = $1 AND m.is_banned = false",
     )
@@ -321,6 +321,7 @@ async fn identify(
             id: r.get("id"),
             name: r.get("name"),
             icon_url: r.get("icon_url"),
+            owner_id: r.get("owner_id"),
         })
         .collect();
 
