@@ -64,8 +64,7 @@ async fn main() -> anyhow::Result<()> {
 
     let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "static".into());
     let app = Router::new()
-        .nest("/api", api.clone())
-        .nest("/", api)
+        .nest("/api", api)
         .fallback_service(
             ServeDir::new(&static_dir)
                 .fallback(ServeFile::new(format!("{static_dir}/index.html")))
