@@ -47,6 +47,36 @@ export const useAuthStore = defineStore('auth', () => {
     setAuth(data)
   }
 
+  async function refreshAccessToken(): Promise<boolean> {
+    if (!refreshToken.value) return false
+    try {
+      const { data } = await axios.post(`${centralUrl.value}/api/auth/refresh`, {
+        refresh_token: refreshToken.value,
+      })
+      setAuth(data)
+      return true
+    } catch {
+      logout()
+      return false
+    }
+  }
+
+  // Проверяет срок токена и обновляет если истёк или истекает через <60с
+  async function ensureValidToken(): Promise<boolean> {
+    if (!accessToken.value) return false
+    try {
+      const payload = JSON.parse(atob(accessToken.value.split('.')[1]))
+      const expiresAt = (payload.exp as number) * 1000
+      if (expiresAt - Date.now() < 60_000) {
+        return await refreshAccessToken()
+      }
+      return true
+    } catch {
+      // Токен нечитаемый — пробуем обновить
+      return await refreshAccessToken()
+    }
+  }
+
   async function checkVerificationStatus(): Promise<boolean> {
     if (!accessToken.value) return false
     const { data } = await axios.get(`${centralUrl.value}/api/auth/status`, {
@@ -70,5 +100,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('email_verified')
   }
 
-  return { isLoggedIn, username, userId, accessToken, emailVerified, centralUrl, login, register, checkVerificationStatus, logout }
+  return { isLoggedIn, username, userId, accessToken, emailVerified, centralUrl, login, register, refreshAccessToken, ensureValidToken, checkVerificationStatus, logout }
 })

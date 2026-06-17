@@ -14,9 +14,13 @@ export const useWsStore = defineStore('ws', () => {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let reconnectDelay = 1000
 
-  function connect(serverUrl: string) {
+  async function connect(serverUrl: string) {
     const auth = useAuthStore()
     if (!auth.accessToken) return
+
+    // Обновляем токен если истёк или истекает — иначе IDENTIFY упадёт
+    const ok = await auth.ensureValidToken()
+    if (!ok) return
 
     const wsUrl = serverUrl.replace(/\/$/, '').replace(/^http/, 'ws') + '/ws'
     status.value = 'connecting'
@@ -167,7 +171,7 @@ export const useWsStore = defineStore('ws', () => {
   function scheduleReconnect(serverUrl: string) {
     reconnectTimer = setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, 30000)
-      connect(serverUrl)
+      connect(serverUrl) // внутри сам обновит токен если нужно
     }, reconnectDelay)
   }
 

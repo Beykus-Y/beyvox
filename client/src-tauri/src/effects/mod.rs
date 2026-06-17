@@ -1,15 +1,38 @@
 mod compressor;
 mod eq;
 mod gate;
+mod rnnoise_effect;
 
 pub use compressor::Compressor;
 pub use eq::Eq3Band;
 pub use gate::NoiseGate;
+pub use rnnoise_effect::RnnoiseEffect;
 
 use serde::Serialize;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
+// Атомики для хранения текущих уровней RMS в dB (как биты f32)
+static INPUT_LEVEL_DB: AtomicU32  = AtomicU32::new(0);
+static OUTPUT_LEVEL_DB: AtomicU32 = AtomicU32::new(0);
+
+fn rms_db(samples: &[f32]) -> f32 {
+    if samples.is_empty() { return -80.0; }
+    let sum: f32 = samples.iter().map(|&s| s * s).sum();
+    let rms = (sum / samples.len() as f32).sqrt();
+    if rms < 1e-9 { -80.0 } else { (20.0 * rms.log10()).max(-80.0) }
+}
+
+fn store_db(atomic: &AtomicU32, db: f32) {
+    atomic.store(db.to_bits(), Ordering::Relaxed);
+}
+
+fn load_db(atomic: &AtomicU32) -> f32 {
+    f32::from_bits(atomic.load(Ordering::Relaxed))
+}
+
 pub struct EffectChain {
+    pub rnnoise: RnnoiseEffect,
     pub gate: NoiseGate,
     pub compressor: Compressor,
     pub eq: Eq3Band,
@@ -18,6 +41,7 @@ pub struct EffectChain {
 impl Default for EffectChain {
     fn default() -> Self {
         Self {
+            rnnoise: RnnoiseEffect::default(),
             gate: NoiseGate::default(),
             compressor: Compressor::default(),
             eq: Eq3Band::default(),
@@ -26,10 +50,14 @@ impl Default for EffectChain {
 }
 
 impl EffectChain {
+    // Цепочка: RNNoise → Gate → Compressor → EQ
     pub fn process(&mut self, samples: &mut [f32]) {
+        store_db(&INPUT_LEVEL_DB, rms_db(samples));
+        self.rnnoise.process(samples);
         self.gate.process(samples);
         self.compressor.process(samples);
         self.eq.process(samples);
+        store_db(&OUTPUT_LEVEL_DB, rms_db(samples));
     }
 
     pub fn set_sample_rate(&mut self, sr: f32) {
@@ -49,6 +77,7 @@ pub fn get_chain() -> Arc<Mutex<EffectChain>> {
 
 #[derive(Serialize)]
 pub struct EffectsStateDto {
+    pub rnnoise_enabled: bool,
     pub gate_enabled: bool,
     pub gate_threshold_db: f32,
     pub gate_attack_ms: f32,
@@ -67,6 +96,18 @@ pub struct EffectsStateDto {
 }
 
 // ─── Tauri commands ─────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_levels() -> (f32, f32) {
+    (load_db(&INPUT_LEVEL_DB), load_db(&OUTPUT_LEVEL_DB))
+}
+
+#[tauri::command]
+pub fn set_rnnoise(enabled: bool) {
+    let arc = get_chain();
+    let mut c = arc.lock().unwrap();
+    c.rnnoise.enabled = enabled;
+}
 
 #[tauri::command]
 pub fn set_noise_gate(enabled: bool, threshold_db: f32, attack_ms: f32, release_ms: f32) {
@@ -114,6 +155,7 @@ pub fn get_effects_state() -> EffectsStateDto {
     let arc = get_chain();
     let c = arc.lock().unwrap();
     EffectsStateDto {
+        rnnoise_enabled: c.rnnoise.enabled,
         gate_enabled: c.gate.enabled,
         gate_threshold_db: c.gate.threshold_db,
         gate_attack_ms: c.gate.attack_ms,

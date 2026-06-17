@@ -35,6 +35,8 @@ pub fn run() {
             voice::set_playback_volume,
             vst::load_vst_info,
             vst::open_vst_gui,
+            effects::get_levels,
+            effects::set_rnnoise,
             effects::set_noise_gate,
             effects::set_compressor,
             effects::set_eq,

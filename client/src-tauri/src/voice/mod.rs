@@ -21,7 +21,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 // cpal::Stream не Send — оборачиваем (Mutex гарантирует монопольный доступ)
-struct SendStream(cpal::Stream);
+struct SendStream(#[allow(dead_code)] cpal::Stream);
 unsafe impl Send for SendStream {}
 unsafe impl Sync for SendStream {}
 
@@ -394,7 +394,7 @@ fn start_playback(
 }
 
 async fn handle_room_events(
-    room: Arc<Room>,
+    _room: Arc<Room>,
     app: AppHandle,
     mixer: Mixer,
     playback_rate: u32,

@@ -136,6 +136,71 @@
           <p class="settings-hint">Эффекты применяются к микрофону до кодирования Opus. Цепочка: Gate → Compressor → EQ.</p>
           <div class="settings-divider" />
 
+          <!-- Визуализация — sticky, всегда видна при скролле -->
+          <div class="viz-panel">
+            <div class="viz-header">
+              <div class="viz-title-row">
+                <span>Осциллограф</span>
+                <span class="viz-sep-inline">·</span>
+                <span>FFT</span>
+              </div>
+              <span :class="['viz-dot', { active: vizActive }]">{{ vizActive ? '● живой захват' : '○ нет захвата' }}</span>
+            </div>
+
+            <div class="viz-canvases">
+              <canvas ref="waveCanvas" class="viz-wave"></canvas>
+              <div class="viz-divider"></div>
+              <canvas ref="specCanvas" class="viz-spec"></canvas>
+            </div>
+            <div class="viz-freq-labels">
+              <span>20</span><span>100</span><span>500</span><span>1k</span><span>4k</span><span>10k</span><span>20k Hz</span>
+            </div>
+
+            <!-- Dual IN/OUT meter -->
+            <div class="dual-meter">
+              <div class="dual-meter-row">
+                <span class="dm-label">IN</span>
+                <div class="dm-track">
+                  <div class="dm-fill dm-in" :style="{ width: inPct + '%' }"></div>
+                  <div v-if="fx.gate.enabled" class="dm-pin dm-pin-gate" :style="{ left: gatePinPct + '%' }" title="Gate threshold"></div>
+                  <div v-if="fx.comp.enabled" class="dm-pin dm-pin-comp" :style="{ left: compPinPct + '%' }" title="Compressor threshold"></div>
+                </div>
+                <span class="dm-val">{{ levelDbStr }}</span>
+              </div>
+              <div class="dual-meter-row">
+                <span class="dm-label">OUT</span>
+                <div class="dm-track">
+                  <div class="dm-fill dm-out" :style="{ width: outPct + '%' }"></div>
+                  <div v-if="fx.gate.enabled" class="dm-pin dm-pin-gate" :style="{ left: gatePinPct + '%' }"></div>
+                  <div v-if="fx.comp.enabled" class="dm-pin dm-pin-comp" :style="{ left: compPinPct + '%' }"></div>
+                </div>
+                <span class="dm-val" :class="{ 'dm-gated': isGated }">{{ isGated ? 'GATED' : outDbStr }}</span>
+              </div>
+              <div class="dm-legend">
+                <span class="dm-leg-gate" v-if="fx.gate.enabled">│ Gate</span>
+                <span class="dm-leg-comp" v-if="fx.comp.enabled">│ Comp</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- RNNoise -->
+          <div class="effect-section">
+            <div class="effect-header">
+              <div class="effect-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                RNNoise — AI шумоподавление
+                <span class="fx-badge">AI</span>
+              </div>
+              <label class="fx-toggle">
+                <input type="checkbox" v-model="fx.rnnoise" @change="applyRnnoise" />
+                <span class="fx-toggle-track"></span>
+              </label>
+            </div>
+            <div v-if="fx.rnnoise" class="effect-params">
+              <p class="settings-hint">Нейросеть RNNoise удаляет фоновый шум (вентиляторы, клавиатура, улица). Работает на 48kHz, задержка ~10мс. Применяется до Gate и Compressor.</p>
+            </div>
+          </div>
+
           <!-- Noise Gate -->
           <div class="effect-section">
             <div class="effect-header">
@@ -202,6 +267,14 @@
               <div class="settings-field">
                 <label>Гейн компенсации — {{ fx.comp.makeup_db > 0 ? '+' : '' }}{{ fx.comp.makeup_db }} dB</label>
                 <input type="range" min="-12" max="24" step="0.5" v-model.number="fx.comp.makeup_db" @input="applyCompressor" class="volume-slider" />
+              </div>
+              <!-- Gain Reduction meter -->
+              <div class="meter-row">
+                <span class="meter-side-label">GR</span>
+                <div class="gr-track">
+                  <div class="gr-fill" :style="{ width: grPct + '%' }"></div>
+                </div>
+                <span class="meter-db-val gr-val">{{ grDb > 0 ? '-' + grDb.toFixed(1) + ' dB' : '0 dB' }}</span>
               </div>
             </div>
           </div>
@@ -281,7 +354,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openFile } from '@tauri-apps/plugin-dialog'
 import { useAuthStore } from '../../stores/auth'
@@ -306,8 +379,205 @@ const settingsTabs = [
   { id: 'vst', label: 'VST плагины' }
 ]
 
-// Built-in effects reactive state
+// ── Visualization ─────────────────────────────────────────────────────────────
+const waveCanvas = ref<HTMLCanvasElement | null>(null)
+const specCanvas  = ref<HTMLCanvasElement | null>(null)
+const vizActive   = ref(false)
+const currentDb = ref(-80)   // входной уровень из Web Audio (для осциллографа/FFT)
+const realInDb  = ref(-80)   // входной уровень из Rust (до эффектов)
+const realOutDb = ref(-80)   // выходной уровень из Rust (после всех эффектов) — реальный!
+
+const DB_MIN = -80
+const DB_MAX = 0
+
+const dbToPct = (db: number) =>
+  Math.max(0, Math.min(100, ((db - DB_MIN) / (DB_MAX - DB_MIN)) * 100))
+
+const levelDbStr = computed(() =>
+  realInDb.value > DB_MIN + 1 ? realInDb.value.toFixed(1) + ' dB' : '-∞'
+)
+const inPct  = computed(() => dbToPct(realInDb.value))
+const outPct = computed(() => dbToPct(realOutDb.value))
+const outDbStr = computed(() =>
+  realOutDb.value > DB_MIN + 1 ? realOutDb.value.toFixed(1) + ' dB' : '-∞'
+)
+
+// Gate: реально заглушён если OUT намного тише IN (≥30 dB разница при активном gate)
+const isGated = computed(() =>
+  fx.gate.enabled && (realInDb.value - realOutDb.value) > 30
+)
+
+const gatePinPct = computed(() => dbToPct(fx.gate.threshold_db))
+const compPinPct = computed(() => dbToPct(fx.comp.threshold_db))
+
+// GR из реальных уровней (а не математики)
+const grDb  = computed(() => Math.max(0, realInDb.value - realOutDb.value))
+const grPct = computed(() => Math.min(100, (grDb.value / 30) * 100))
+
+let audioCtx: AudioContext | null = null
+let analyserNode: AnalyserNode | null = null
+let micStream: MediaStream | null = null
+let rafId: number | null = null
+let levelsInterval: ReturnType<typeof setInterval> | null = null
+
+async function startViz() {
+  if (vizActive.value) return
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    audioCtx = new AudioContext()
+    analyserNode = audioCtx.createAnalyser()
+    analyserNode.fftSize = 2048
+    analyserNode.smoothingTimeConstant = 0.8
+    audioCtx.createMediaStreamSource(micStream).connect(analyserNode)
+    vizActive.value = true
+    rafId = requestAnimationFrame(drawLoop)
+
+    // Polling реальных уровней из Rust каждые 50мс
+    levelsInterval = setInterval(async () => {
+      try {
+        const [inDb, outDb] = await invoke<[number, number]>('get_levels')
+        realInDb.value  = inDb
+        realOutDb.value = outDb
+      } catch { /* Tauri недоступен в браузере */ }
+    }, 50)
+  } catch {
+    // mic недоступен — визуализация молча не запустится
+  }
+}
+
+function stopViz() {
+  vizActive.value = false
+  if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+  if (levelsInterval !== null) { clearInterval(levelsInterval); levelsInterval = null }
+  micStream?.getTracks().forEach(t => t.stop())
+  micStream = null
+  audioCtx?.close()
+  audioCtx = null
+  analyserNode = null
+  currentDb.value = DB_MIN
+  realInDb.value  = DB_MIN
+  realOutDb.value = DB_MIN
+}
+
+function drawLoop() {
+  if (!vizActive.value || !analyserNode) return
+  rafId = requestAnimationFrame(drawLoop)
+
+  const bufLen = analyserNode.frequencyBinCount
+  const timeData = new Uint8Array(bufLen)
+  const freqData = new Uint8Array(bufLen)
+  analyserNode.getByteTimeDomainData(timeData)
+  analyserNode.getByteFrequencyData(freqData)
+
+  // currentDb только для осциллографа (порог gate на canvas)
+  let sum = 0
+  for (let i = 0; i < bufLen; i++) { const v = (timeData[i] - 128) / 128; sum += v * v }
+  const rms = Math.sqrt(sum / bufLen)
+  currentDb.value = rms > 0.00001 ? Math.max(DB_MIN, 20 * Math.log10(rms)) : DB_MIN
+
+  drawWave(timeData)
+  drawSpectrum(freqData)
+}
+
+function drawWave(timeData: Uint8Array) {
+  const canvas = waveCanvas.value
+  if (!canvas) return
+  // Подгоняем внутренние пиксели под CSS-размер
+  if (canvas.width !== canvas.offsetWidth) canvas.width = canvas.offsetWidth
+  const W = canvas.width, H = canvas.height
+  const ctx = canvas.getContext('2d')!
+
+  ctx.clearRect(0, 0, W, H)
+
+  // Центральная нулевая линия
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+  ctx.lineWidth = 1
+  ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke()
+
+  // Линия порога gate (если включён) — пунктир
+  if (fx.gate.enabled) {
+    const amp = Math.pow(10, fx.gate.threshold_db / 20)
+    const yTop = H / 2 - amp * H / 2
+    const yBot = H / 2 + amp * H / 2
+    const passing = currentDb.value > fx.gate.threshold_db
+    ctx.strokeStyle = passing ? 'rgba(35,197,94,0.5)' : 'rgba(239,68,68,0.5)'
+    ctx.lineWidth = 1
+    ctx.setLineDash([4, 4])
+    ctx.beginPath(); ctx.moveTo(0, yTop); ctx.lineTo(W, yTop); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(0, yBot); ctx.lineTo(W, yBot); ctx.stroke()
+    ctx.setLineDash([])
+  }
+
+  // Осциллограмма
+  ctx.strokeStyle = '#7c6cff'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  const step = W / timeData.length
+  for (let i = 0; i < timeData.length; i++) {
+    const x = i * step
+    const y = (timeData[i] / 128) * (H / 2)
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+  }
+  ctx.stroke()
+}
+
+function drawSpectrum(freqData: Uint8Array) {
+  const canvas = specCanvas.value
+  if (!canvas) return
+  if (canvas.width !== canvas.offsetWidth) canvas.width = canvas.offsetWidth
+  const W = canvas.width, H = canvas.height
+  const ctx = canvas.getContext('2d')!
+
+  ctx.clearRect(0, 0, W, H)
+
+  // Полосы EQ — подсвечиваем диапазоны если EQ включён
+  if (fx.eq.enabled) {
+    const sampleRate = audioCtx?.sampleRate ?? 48000
+    const binHz = sampleRate / (analyserNode!.fftSize)
+    const lowBin  = Math.round(200 / binHz)
+    const midBin  = Math.round(fx.eq.mid_freq / binHz)
+    const highBin = Math.round(8000 / binHz)
+    const half = freqData.length
+
+    const xOf = (bin: number) => (bin / half) * W
+    const xLow  = xOf(Math.max(0, lowBin - 30))
+    const xMid  = xOf(Math.max(0, midBin - 60))
+    const xHigh = xOf(Math.max(0, highBin - 80))
+    ctx.fillStyle = 'rgba(124,108,255,0.06)'; ctx.fillRect(xLow, 0, 60 * W / half, H)
+    ctx.fillStyle = 'rgba(96,165,250,0.06)';  ctx.fillRect(xMid, 0, 120 * W / half, H)
+    ctx.fillStyle = 'rgba(52,211,153,0.06)';  ctx.fillRect(xHigh, 0, 160 * W / half, H)
+  }
+
+  // Спектральные бары — логарифмическая шкала по X
+  const half = freqData.length
+  const barW = Math.max(2, W / 80)
+  for (let i = 0; i < 80; i++) {
+    // Логарифмическое распределение: 20Hz–20kHz
+    const freq = 20 * Math.pow(1000, i / 80)
+    const sampleRate = audioCtx?.sampleRate ?? 48000
+    const bin = Math.round(freq / (sampleRate / analyserNode!.fftSize / 2))
+    const val = bin < half ? freqData[bin] : 0
+    const barH = (val / 255) * H
+
+    // Цвет: фиолетовый → синий → голубой по частоте
+    const hue = 270 - (i / 80) * 100
+    const sat = 60 + (val / 255) * 20
+    const lit  = 45 + (val / 255) * 20
+    ctx.fillStyle = `hsl(${hue},${sat}%,${lit}%)`
+    ctx.fillRect(i * (W / 80), H - barH, barW - 1, barH)
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'effects') startViz()
+  else stopViz()
+})
+
+onUnmounted(stopViz)
+
+// ── Built-in effects reactive state ──────────────────────────────────────────
 const fx = reactive({
+  rnnoise: false,
   gate: { enabled: false, threshold_db: -40, attack_ms: 5, release_ms: 200 },
   comp: { enabled: false, threshold_db: -18, ratio: 4, attack_ms: 5, release_ms: 100, makeup_db: 0 },
   eq: { enabled: false, low_db: 0, mid_db: 0, mid_freq: 1000, high_db: 0 }
@@ -339,6 +609,7 @@ onMounted(async () => {
   }
 
   // Загружаем эффекты
+  fx.rnnoise = localStorage.getItem('fx_rnnoise') === 'true'
   const savedGate = localStorage.getItem('fx_gate')
   const savedComp = localStorage.getItem('fx_comp')
   const savedEq = localStorage.getItem('fx_eq')
@@ -415,6 +686,11 @@ function formatKeyCode(code: string): string {
 }
 
 // Built-in effects apply functions
+async function applyRnnoise() {
+  localStorage.setItem('fx_rnnoise', String(fx.rnnoise))
+  await invoke('set_rnnoise', { enabled: fx.rnnoise }).catch(() => {})
+}
+
 async function applyGate() {
   localStorage.setItem('fx_gate', JSON.stringify(fx.gate))
   await invoke('set_noise_gate', {
@@ -495,8 +771,8 @@ function removeVst(i: number) {
 .settings-modal {
   width: 760px;
   max-width: 95vw;
-  height: 520px;
-  max-height: 90vh;
+  height: 680px;
+  max-height: 92vh;
   flex-direction: row;
 }
 
@@ -532,12 +808,32 @@ function removeVst(i: number) {
 
 .settings-content {
   flex: 1;
+  min-height: 0;
   padding: 32px;
   overflow-y: auto;
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+/* Запрещаем flex-shrink на детях — иначе они сжимаются вместо того чтобы появился скролл */
+.settings-content > * {
+  flex-shrink: 0;
+}
+.settings-content::-webkit-scrollbar {
+  width: 6px;
+}
+.settings-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.settings-content::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.settings-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .settings-content h2 {
@@ -748,7 +1044,188 @@ function removeVst(i: number) {
   color: var(--text-muted);
 }
 
-/* Эффекты */
+/* ── Визуализация (sticky) ────────────────────────────────────────────────── */
+.viz-panel {
+  position: sticky;
+  top: -32px; /* компенсируем padding родителя */
+  z-index: 10;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: #0a0a12;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.viz-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  border-bottom: 1px solid var(--border);
+}
+
+.viz-title-row { display: flex; align-items: center; gap: 6px; }
+.viz-sep-inline { color: var(--border); }
+.viz-dot { font-size: 10px; color: var(--text-muted); }
+.viz-dot.active { color: var(--online); }
+
+.viz-canvases {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.viz-wave {
+  display: block;
+  width: 40%;
+  height: 52px;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.viz-divider { display: none; }
+
+.viz-spec {
+  display: block;
+  flex: 1;
+  height: 52px;
+}
+
+.viz-freq-labels {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 8px 2px calc(40% + 8px);
+  font-size: 9px;
+  color: var(--text-muted);
+  font-family: monospace;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Dual IN/OUT meter ────────────────────────────────────────────────────── */
+.dual-meter {
+  padding: 8px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dual-meter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dm-label {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  min-width: 24px;
+}
+
+.dm-track {
+  flex: 1;
+  height: 7px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  position: relative;
+  overflow: visible;
+}
+
+.dm-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.04s linear;
+}
+
+.dm-in  { background: linear-gradient(90deg, #7c6cff, #a78bfa); }
+.dm-out { background: linear-gradient(90deg, #059669, #34d399); }
+
+.dm-pin {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 13px;
+  border-radius: 1px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.dm-pin-gate { background: #facc15; }
+.dm-pin-comp { background: #fb923c; }
+
+.dm-val {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-secondary);
+  min-width: 62px;
+  text-align: right;
+}
+
+.dm-gated {
+  color: var(--danger);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.dm-legend {
+  display: flex;
+  gap: 10px;
+  padding-left: 32px;
+  font-size: 9px;
+  font-family: monospace;
+}
+
+.dm-leg-gate { color: #facc15; }
+.dm-leg-comp { color: #fb923c; }
+
+/* ── GR meter (в Compressor) ──────────────────────────────────────────────── */
+.meter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meter-side-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  min-width: 32px;
+}
+
+.meter-db-val {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-secondary);
+  min-width: 56px;
+  text-align: right;
+}
+
+.gr-track {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-hover);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.gr-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #7c6cff, #ef4444);
+  transition: width 0.05s linear;
+}
+
+.gr-val { color: #ef9090; }
+
+/* ── Эффекты ──────────────────────────────────────────────────────────────── */
 .effect-section {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
@@ -769,6 +1246,16 @@ function removeVst(i: number) {
   gap: 8px;
   font-weight: 700;
   font-size: 13px;
+}
+
+.fx-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #7c6cff, #a78bfa);
+  color: #fff;
+  letter-spacing: 0.05em;
 }
 
 .effect-params {
