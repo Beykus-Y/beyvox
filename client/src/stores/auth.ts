@@ -34,12 +34,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(login: string, password: string) {
-    const { data } = await axios.post(`${centralUrl.value}/auth/login`, { login, password })
+    const { data } = await axios.post(`${centralUrl.value}/api/auth/login`, { login, password })
     setAuth(data)
   }
 
   async function register(username: string, email: string, password: string) {
-    const { data } = await axios.post(`${centralUrl.value}/auth/register`, {
+    const { data } = await axios.post(`${centralUrl.value}/api/auth/register`, {
       username,
       email,
       password,
@@ -49,7 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function checkVerificationStatus(): Promise<boolean> {
     if (!accessToken.value) return false
-    const { data } = await axios.get(`${centralUrl.value}/auth/status`, {
+    const { data } = await axios.get(`${centralUrl.value}/api/auth/status`, {
       headers: { Authorization: `Bearer ${accessToken.value}` }
     })
     emailVerified.value = data.email_verified

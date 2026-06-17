@@ -18,7 +18,7 @@ api.interceptors.response.use(
       if (refresh) {
         try {
           const centralUrl = import.meta.env.VITE_CENTRAL_URL || 'https://beyvox.beykus.fun'
-          const { data } = await axios.post(`${centralUrl}/auth/refresh`, {
+          const { data } = await axios.post(`${centralUrl}/api/auth/refresh`, {
             refresh_token: refresh,
           })
           localStorage.setItem('access_token', data.access_token)
