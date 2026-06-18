@@ -103,6 +103,15 @@ async fn main() -> anyhow::Result<()> {
         .route("/admin/api/guilds/:id/members", get(admin::admin_list_members))
         .route("/admin/api/guilds/:gid/members/:uid/kick", post(admin::admin_kick_member))
         .route("/admin/api/guilds/:gid/members/:uid/ban", post(admin::admin_ban_member))
+        // New extended admin API routes
+        .route("/admin/api/users", get(admin::admin_list_users))
+        .route("/admin/api/users/:id/ban", post(admin::admin_ban_user_global))
+        .route("/admin/api/users/:id/unban", post(admin::admin_unban_user_global))
+        .route("/admin/api/settings", get(admin::admin_get_settings).post(admin::admin_save_settings))
+        .route("/admin/api/stats", get(admin::admin_get_stats))
+        .route("/admin/api/guilds/:id/roles", get(admin::admin_list_roles).post(admin::admin_create_role))
+        .route("/admin/api/guilds/:id/roles/:rid", patch(admin::admin_update_role).delete(admin::admin_delete_role))
+        .route("/admin/api/guilds/:id/members/:uid/roles/:rid", put(admin::admin_assign_role).delete(admin::admin_remove_role))
         // Discovery (для central pull)
         .route("/api/discovery", get(admin::discovery))
         // WebSocket

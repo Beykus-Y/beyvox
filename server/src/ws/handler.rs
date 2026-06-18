@@ -297,6 +297,16 @@ async fn identify(
     let claims = decode::<Claims>(token, &key, &validation)?.claims;
     let user_id: Uuid = claims.sub.parse()?;
 
+    // Проверяем глобальный бан пользователя
+    let is_banned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM banned_users WHERE user_id = $1)")
+        .bind(user_id)
+        .fetch_one(&state.db)
+        .await?;
+
+    if is_banned {
+        anyhow::bail!("user is globally banned");
+    }
+
     // Обновляем username во всех гильдиях (исправляет пустые username от прямых DB-вставок)
     let _ = sqlx::query("UPDATE members SET username = $1 WHERE user_id = $2")
         .bind(&claims.username)

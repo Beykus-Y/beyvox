@@ -30,8 +30,9 @@ cpal = "0.15"
 nnnoiseless = "0.5"
 directories = "5"
 livekit = { version = "0.7", features = ["tokio", "native-tls"] }
+libwebrtc = "=0.3.36"
 futures-util = "0.3"
 screenshots = "0.8"
-image = { version = "0.24", default-features = false, features = ["jpeg"] }
 
-
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-capture = "2"

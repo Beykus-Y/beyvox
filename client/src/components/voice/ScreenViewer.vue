@@ -37,31 +37,41 @@ const screenStore = useScreenStore()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const hasFrame = ref(false)
 let unlisten: UnlistenFn | null = null
+let ctx: CanvasRenderingContext2D | null = null
 
 async function subscribeToFrames(userId: string) {
   unlisten?.()
+  ctx = null
   unlisten = await listen<number[]>(`screen://frame/${userId}`, (event) => {
-    const jpegBytes = new Uint8Array(event.payload)
-    renderFrame(jpegBytes)
+    renderFrame(new Uint8Array(event.payload))
   })
 }
 
-function renderFrame(jpegBytes: Uint8Array) {
+function renderFrame(bytes: Uint8Array) {
   const canvas = canvasRef.value
-  if (!canvas) return
+  if (!canvas || bytes.length < 8) return
 
-  const blob = new Blob([jpegBytes], { type: 'image/jpeg' })
-  const url = URL.createObjectURL(blob)
-  const img = new Image()
-  img.onload = () => {
-    canvas.width = img.width
-    canvas.height = img.height
-    const ctx = canvas.getContext('2d')
-    ctx?.drawImage(img, 0, 0)
-    URL.revokeObjectURL(url)
-    hasFrame.value = true
+  const view = new DataView(bytes.buffer, bytes.byteOffset)
+  const width = view.getUint32(0, true)
+  const height = view.getUint32(4, true)
+  if (bytes.length < 8 + width * height * 4) return
+
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width
+    canvas.height = height
+    ctx = canvas.getContext('2d')
   }
-  img.src = url
+  if (!ctx) ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const rgbaSlice = bytes.subarray(8, 8 + width * height * 4)
+  const imageData = new ImageData(
+    new Uint8ClampedArray(rgbaSlice.buffer, rgbaSlice.byteOffset, rgbaSlice.byteLength),
+    width,
+    height,
+  )
+  ctx.putImageData(imageData, 0, 0)
+  hasFrame.value = true
 }
 
 onMounted(() => {

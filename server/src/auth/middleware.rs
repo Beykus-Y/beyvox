@@ -98,6 +98,21 @@ impl FromRequestParts<AppState> for AuthUser {
             .parse::<Uuid>()
             .map_err(|_| (StatusCode::UNAUTHORIZED, "invalid sub").into_response())?;
 
+        // Проверяем глобальный бан пользователя
+        let is_banned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM banned_users WHERE user_id = $1)")
+            .bind(user_id)
+            .fetch_one(&app_state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("failed to check global ban: {e}");
+                (StatusCode::INTERNAL_SERVER_ERROR, "database error").into_response()
+            })?;
+
+        if is_banned {
+            return Err((StatusCode::FORBIDDEN, "user is globally banned").into_response());
+        }
+
         Ok(AuthUser { user_id, username: claims.username })
     }
 }
+

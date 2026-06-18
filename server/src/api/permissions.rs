@@ -16,6 +16,32 @@ pub const BAN_MEMBERS: i64     = 1 << 9;
 
 /// OR всех ролей участника (@everyone + назначенные). ADMINISTRATOR → i64::MAX.
 pub async fn get_member_permissions(state: &AppState, user_id: Uuid, guild_id: Uuid) -> AppResult<i64> {
+    // 1. Проверяем, является ли пользователь владельцем сервера (Server Owner)
+    if !state.config.owner_username.is_empty() {
+        let is_server_owner: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM members WHERE user_id = $1 AND username = $2)"
+        )
+        .bind(user_id)
+        .bind(&state.config.owner_username)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(false);
+
+        if is_server_owner {
+            return Ok(i64::MAX);
+        }
+    }
+
+    // 2. Проверяем, является ли пользователь создателем гильдии (Guild Owner)
+    let owner_id: Option<Uuid> = sqlx::query_scalar("SELECT owner_id FROM guilds WHERE id = $1")
+        .bind(guild_id)
+        .fetch_optional(&state.db)
+        .await?;
+
+    if owner_id == Some(user_id) {
+        return Ok(i64::MAX);
+    }
+
     let everyone: i64 = sqlx::query_scalar(
         "SELECT COALESCE(permissions, 0) FROM roles WHERE guild_id = $1 AND name = '@everyone'",
     )
@@ -40,6 +66,7 @@ pub async fn get_member_permissions(state: &AppState, user_id: Uuid, guild_id: U
     }
     Ok(combined)
 }
+
 
 /// Базовые права + применение channel_permission_overrides.
 pub async fn get_effective_permissions(

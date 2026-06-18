@@ -450,7 +450,7 @@ async fn handle_room_events(
                         let app = app.clone();
                         tokio::spawn(async move {
                             let mut stream = NativeVideoStream::new(video_track.rtc_track());
-                            let frame_interval = std::time::Duration::from_millis(100); // 10 fps viewer
+                            let frame_interval = std::time::Duration::from_millis(33); // ~30 fps viewer
                             let mut last_emit = std::time::Instant::now()
                                 .checked_sub(frame_interval)
                                 .unwrap_or(std::time::Instant::now());
@@ -475,10 +475,14 @@ async fn handle_room_events(
                                     h as i32,
                                 );
 
-                                if let Ok(jpeg) = crate::screen::encode_jpeg(&rgba, w, h, 60) {
-                                    let event_name = format!("screen://frame/{pid}");
-                                    let _ = app.emit(&event_name, jpeg);
-                                }
+                                // Payload: [u32 width LE][u32 height LE][RGBA bytes...]
+                                // Зритель декодирует putImageData — no JPEG lossy compression
+                                let mut payload = Vec::with_capacity(8 + rgba.len());
+                                payload.extend_from_slice(&w.to_le_bytes());
+                                payload.extend_from_slice(&h.to_le_bytes());
+                                payload.extend_from_slice(&rgba);
+                                let event_name = format!("screen://frame/{pid}");
+                                let _ = app.emit(&event_name, payload);
                             }
                         });
                     }

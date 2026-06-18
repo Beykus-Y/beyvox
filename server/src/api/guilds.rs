@@ -385,11 +385,29 @@ pub async fn ensure_member(state: &AppState, user_id: Uuid, guild_id: Uuid) -> A
     .await?;
 
     match row {
-        None => Err(AppError::Forbidden),
+        None => {
+            // Если пользователя нет в гильдии, проверяем, является ли он владельцем сервера
+            if !state.config.owner_username.is_empty() {
+                let is_server_owner: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM members WHERE user_id = $1 AND username = $2)"
+                )
+                .bind(user_id)
+                .bind(&state.config.owner_username)
+                .fetch_one(&state.db)
+                .await
+                .unwrap_or(false);
+
+                if is_server_owner {
+                    return Ok(());
+                }
+            }
+            Err(AppError::Forbidden)
+        }
         Some(r) if r.get::<bool, _>("is_banned") => Err(AppError::Forbidden),
         _ => Ok(()),
     }
 }
+
 
 fn generate_code() -> String {
     use rand::Rng;
