@@ -24,6 +24,8 @@ struct ScreenEngine {
     video_track: LocalVideoTrack,
     stop_flag: Arc<AtomicBool>,
     room: Arc<livekit::Room>,
+    // Some when using CaptureCore.dll — must join before calling dll.init() again
+    join_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 static SCREEN_ENGINE: Mutex<Option<ScreenEngine>> = Mutex::new(None);
@@ -71,7 +73,15 @@ pub async fn start_screen_share(
         RtcVideoSource::Native(source.clone()),
     );
 
-    eprintln!("[screen] starting share: {}x{} @{}fps quality={}", out_w, out_h, fps, quality);
+    // fps clamped to [1,60] above — nonlinear curve smooths bitrate between 30 and 60fps
+    let effective_fps = if fps <= 30 { fps as f64 } else { 30.0 + (fps - 30) as f64 * 0.7 };
+    let target_bitrate = ((0.165 * out_w as f64 * out_h as f64 * effective_fps) as u64)
+        .clamp(500_000, 15_000_000);
+
+    eprintln!(
+        "[screen] starting share: {}x{} @{}fps (eff={:.1}) bitrate={}bps quality={}",
+        out_w, out_h, fps, effective_fps, target_bitrate, quality
+    );
 
     room.local_participant()
         .publish_track(
@@ -83,11 +93,7 @@ pub async fn start_screen_share(
                 // SDK default: 1 low-fps layer at half resolution (3fps, 200kbps) — достаточно
                 simulcast_layers: None,
                 video_encoding: Some(VideoEncoding {
-                    max_bitrate: match quality.as_str() {
-                        "360p" => 500_000,
-                        "720p" => 1_500_000,
-                        _      => 3_000_000,
-                    },
+                    max_bitrate: target_bitrate,
                     max_framerate: fps as f64,
                 }),
                 // NVENC на Windows, Auto fallback на остальных (LibWebRTC логирует если недоступно)
@@ -103,10 +109,14 @@ pub async fn start_screen_share(
         .await
         .map_err(|e| format!("publish screen track: {e}"))?;
 
-    // Останавливаем предыдущий стрим
+    // Останавливаем предыдущий стрим и ждём завершения DLL-потока до нового dll.init()
     let old = SCREEN_ENGINE.lock().unwrap().take();
     if let Some(old_engine) = old {
-        old_engine.stop_flag.store(true, Ordering::Relaxed);
+        old_engine.stop_flag.store(true, Ordering::Release);
+        // Join DLL capture thread before re-entering dll.init() — avoids g_capture race
+        if let Some(handle) = old_engine.join_handle {
+            let _ = tokio::task::spawn_blocking(move || { let _ = handle.join(); }).await;
+        }
         let _ = old_engine.room.local_participant()
             .unpublish_track(&old_engine.video_track.sid()).await;
     }
@@ -115,15 +125,19 @@ pub async fn start_screen_share(
 
     // Запускаем захват на выделенном OS-потоке (не tokio — это CPU-bound работа)
     #[cfg(target_os = "windows")]
-    start_capture_dxgi(screen_id, out_w, out_h, fps, source, stop_flag.clone());
+    let join_handle = start_capture_dxgi(screen_id, out_w, out_h, fps, source, stop_flag.clone());
 
     #[cfg(not(target_os = "windows"))]
-    start_capture_fallback(screen_id, out_w, out_h, fps, source, stop_flag.clone());
+    let join_handle: Option<std::thread::JoinHandle<()>> = {
+        start_capture_fallback(screen_id, out_w, out_h, fps, source, stop_flag.clone());
+        None
+    };
 
     *SCREEN_ENGINE.lock().unwrap() = Some(ScreenEngine {
         video_track: track,
         stop_flag,
         room,
+        join_handle,
     });
 
     Ok(())
@@ -133,7 +147,10 @@ pub async fn start_screen_share(
 pub async fn stop_screen_share() -> Result<(), String> {
     let engine = SCREEN_ENGINE.lock().unwrap().take();
     if let Some(e) = engine {
-        e.stop_flag.store(true, Ordering::Relaxed);
+        e.stop_flag.store(true, Ordering::Release);
+        if let Some(handle) = e.join_handle {
+            let _ = tokio::task::spawn_blocking(move || { let _ = handle.join(); }).await;
+        }
         let _ = e.room.local_participant().unpublish_track(&e.video_track.sid()).await;
     }
     Ok(())
@@ -141,8 +158,127 @@ pub async fn stop_screen_share() -> Result<(), String> {
 
 // ─── Windows: DXGI Desktop Duplication capture via windows-capture ───────────
 
+// ─── Windows: Dynamic DLL FFI Loader for CaptureCore.dll ─────────────────────
+
+#[cfg(target_os = "windows")]
+struct CaptureCoreDll {
+    _lib: libloading::Library,
+    detect_gpu: unsafe extern "C" fn(vendor_id: *mut u32) -> bool,
+    init: unsafe extern "C" fn(monitor_index: std::os::raw::c_int, out_width: std::os::raw::c_int, out_height: std::os::raw::c_int) -> bool,
+    acquire_frame: unsafe extern "C" fn(y_plane: *mut u8, u_plane: *mut u8, v_plane: *mut u8) -> bool,
+    release: unsafe extern "C" fn(),
+}
+
+#[cfg(target_os = "windows")]
+impl CaptureCoreDll {
+    fn load() -> Result<Self, Box<dyn std::error::Error>> {
+        let mut exe_path = std::env::current_exe()?;
+        exe_path.pop();
+        let dll_path = exe_path.join("CaptureCore.dll");
+        
+        let lib = if dll_path.exists() {
+            unsafe { libloading::Library::new(dll_path)? }
+        } else {
+            // Fallback: LoadLibraryW bare name — searches exe dir first (Windows default)
+            unsafe { libloading::Library::new("CaptureCore.dll")? }
+        };
+
+        unsafe {
+            let detect_gpu = *lib.get(b"capture_core_detect_gpu")?;
+            let init = *lib.get(b"capture_core_init")?;
+            let acquire_frame = *lib.get(b"capture_core_acquire_frame")?;
+            let release = *lib.get(b"capture_core_release")?;
+
+            Ok(Self {
+                _lib: lib,
+                detect_gpu,
+                init,
+                acquire_frame,
+                release,
+            })
+        }
+    }
+}
+
+// ─── Windows: DXGI Desktop Duplication capture via C++ DLL with WGC fallback ─
+
 #[cfg(target_os = "windows")]
 fn start_capture_dxgi(
+    screen_id: u32,
+    out_w: u32,
+    out_h: u32,
+    fps: u8,
+    source: NativeVideoSource,
+    stop_flag: Arc<AtomicBool>,
+) -> Option<std::thread::JoinHandle<()>> {
+    // 1. Попытка запустить через нативный C++ пайплайн CaptureCore (DXGI Duplication + GPU conversion)
+    match CaptureCoreDll::load() {
+        Ok(dll) => {
+            let mut vendor_id = 0u32;
+            if unsafe { (dll.detect_gpu)(&mut vendor_id) } {
+                eprintln!("[screen] Detected GPU Vendor ID: 0x{:X}", vendor_id);
+            }
+
+            if unsafe { (dll.init)(screen_id as i32, out_w as i32, out_h as i32) } {
+                eprintln!("[screen] High-performance C++ DXGI capture initialized. Running GPU loop.");
+
+                let source_clone = source.clone();
+                let stop_flag_clone = stop_flag.clone();
+                let handle = std::thread::Builder::new()
+                    .name("screen-capture-dxgi-dll".into())
+                    .spawn(move || {
+                        let interval = std::time::Duration::from_millis(1000 / fps as u64);
+
+                        loop {
+                            if stop_flag_clone.load(Ordering::Acquire) {
+                                break;
+                            }
+
+                            let start = std::time::Instant::now();
+
+                            let mut buf = I420Buffer::new(out_w, out_h);
+                            let (yp, up, vp) = buf.data_mut();
+
+                            let success = unsafe {
+                                (dll.acquire_frame)(yp.as_mut_ptr(), up.as_mut_ptr(), vp.as_mut_ptr())
+                            };
+
+                            if success {
+                                let video_frame = VideoFrame::new(VideoRotation::VideoRotation0, buf);
+                                source_clone.capture_frame(&video_frame);
+                            } else {
+                                std::thread::sleep(std::time::Duration::from_millis(2));
+                                continue;
+                            }
+
+                            let elapsed = start.elapsed();
+                            if elapsed < interval {
+                                std::thread::sleep(interval - elapsed);
+                            }
+                        }
+
+                        unsafe { (dll.release)() };
+                        eprintln!("[screen] C++ DXGI capture session released.");
+                    })
+                    .expect("Failed to spawn DXGI C++ capture thread");
+
+                return Some(handle);
+            } else {
+                eprintln!("[screen] C++ DXGI capture init failed. Falling back to WGC.");
+            }
+        }
+        Err(e) => {
+            eprintln!("[screen] Failed to load CaptureCore.dll ({e}). Falling back to WGC.");
+        }
+    }
+
+    // 2. Фолбек на WGC (Windows Graphics Capture) при недоступности DXGI
+    start_capture_wgc(screen_id, out_w, out_h, fps, source, stop_flag);
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn start_capture_wgc(
     screen_id: u32,
     out_w: u32,
     out_h: u32,
@@ -162,7 +298,6 @@ fn start_capture_dxgi(
         },
     };
 
-    // Находим монитор по индексу (screen_id начинается с 0 или 1 в зависимости от ОС)
     let monitor = Monitor::from_index(screen_id as usize)
         .or_else(|_| Monitor::primary())
         .unwrap_or_else(|_| {
@@ -204,13 +339,11 @@ fn start_capture_dxgi(
             frame: &mut Frame,
             capture_control: InternalCaptureControl,
         ) -> Result<(), Self::Error> {
-            // Проверяем флаг остановки
             if self.stop_flag.load(Ordering::Relaxed) {
                 capture_control.stop();
                 return Ok(());
             }
 
-            // Ограничиваем FPS
             let now = std::time::Instant::now();
             if now.duration_since(self.last_frame) < self.interval {
                 return Ok(());
@@ -223,7 +356,6 @@ fn start_capture_dxgi(
                 return Ok(());
             }
 
-            // Получаем BGRA пиксели (без padding)
             let buffer = frame.buffer()?;
             let bgra = buffer.as_nopadding_buffer(&mut self.nopadding_buf);
 
@@ -236,16 +368,15 @@ fn start_capture_dxgi(
         }
 
         fn on_closed(&mut self) -> Result<(), Self::Error> {
-            eprintln!("[screen] DXGI capture session closed");
+            eprintln!("[screen] WGC capture session closed");
             Ok(())
         }
     }
 
-    // Запускаем capture на отдельном потоке (free_threaded — не блокирует)
     let flags = (source, out_w, out_h, stop_flag, fps);
 
     std::thread::Builder::new()
-        .name("screen-capture".into())
+        .name("screen-capture-wgc".into())
         .spawn(move || {
             let settings = Settings::new(
                 monitor,
@@ -259,10 +390,10 @@ fn start_capture_dxgi(
             );
 
             if let Err(e) = CaptureHandler::start(settings) {
-                eprintln!("[screen] DXGI capture error: {e}");
+                eprintln!("[screen] WGC capture error: {e}");
             }
         })
-        .expect("Failed to spawn capture thread");
+        .expect("Failed to spawn WGC capture thread");
 }
 
 // ─── Fallback: screenshots crate (Linux / macOS) ────────────────────────────
@@ -359,6 +490,7 @@ fn bgra_to_i420(bgra: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> 
 
 /// RGBA → I420 (non-Windows fallback).
 /// libyuv ABGRToI420 treats input as [R, G, B, A] in memory — matches screenshots crate RGBA.
+#[cfg(not(target_os = "windows"))]
 fn rgba_to_i420(rgba: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> I420Buffer {
     use libwebrtc::native::yuv_helper;
     let cw = (dst_w + 1) / 2;
