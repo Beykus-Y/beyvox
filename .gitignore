@@ -10,6 +10,8 @@ livekit.yaml
 
 # Tauri
 client/src-tauri/target/
+client/src-tauri/CaptureCore.dll
+client/src-tauri/capture-core/build/
 
 # Node
 node_modules/
