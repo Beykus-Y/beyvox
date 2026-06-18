@@ -467,8 +467,10 @@ async fn handle_room_events(
                                     continue;
                                 }
                                 let mut rgba = vec![0u8; (w * h * 4) as usize];
+                                // ABGR → байты в памяти [R, G, B, A] — единственный формат
+                                // совместимый с canvas ImageData (ожидает именно [R,G,B,A])
                                 frame.buffer.to_argb(
-                                    VideoFormatType::RGBA,
+                                    VideoFormatType::ABGR,
                                     &mut rgba,
                                     w * 4,
                                     w as i32,
