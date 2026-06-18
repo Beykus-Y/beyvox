@@ -84,7 +84,7 @@ const emit = defineEmits([
   'logout'
 ])
 
-const appVersion = ref('0.2.0')
+const appVersion = ref('0.4.2')
 
 const menu = reactive({ visible: false, x: 0, y: 0, url: '' })
 
