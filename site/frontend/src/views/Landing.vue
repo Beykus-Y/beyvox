@@ -3,16 +3,16 @@
     <!-- Hero -->
     <section class="hero">
       <div class="container">
-        <div class="badge">Open Source · Self-Hosted · v0.0.2</div>
+        <div class="badge">Open Source · Self-Hosted · v0.4.1</div>
         <h1>Голосовой мессенджер<br><span class="accent">под твоим контролем</span></h1>
         <p class="subtitle">
           BeyVox — альтернатива Discord и TeamSpeak.<br>
           Поднимай свой сервер, общайся голосом, никаких посредников.
         </p>
         <div class="hero-actions">
-          <a href="https://github.com/Beykus-Y/beyvox/releases/tag/v0.0.2" target="_blank" class="btn btn-primary">
+          <a href="https://github.com/Beykus-Y/beyvox/releases/tag/v0.4.1" target="_blank" class="btn btn-primary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 16l-6-6h4V4h4v6h4l-6 6zm-7 2h14v2H5v-2z"/></svg>
-            Скачать v0.0.2
+            Скачать v0.4.1
           </a>
           <a href="https://github.com/Beykus-Y/beyvox" target="_blank" class="btn btn-ghost">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -20,11 +20,17 @@
           </a>
           <RouterLink to="/servers" class="btn btn-ghost">Найти сервер</RouterLink>
         </div>
+
+        <div class="hero-preview">
+          <img src="/shots/chat.png" alt="BeyVox — интерфейс приложения" loading="eager" />
+        </div>
       </div>
     </section>
 
     <!-- Features -->
     <section class="features container">
+      <h2 class="section-title">Всё что нужно для голосового общения</h2>
+      <p class="section-sub">Без лишнего, без слежки, без посредников.</p>
       <div class="feature-grid">
         <div class="card feature-card">
           <div class="feature-icon">🎙️</div>
@@ -33,28 +39,55 @@
         </div>
         <div class="card feature-card">
           <div class="feature-icon">🔌</div>
-          <h3>VST плагины</h3>
-          <p>Загружай VST2/VST3 плагины прямо в клиент. EQ, компрессор, гейт — всё что нужно.</p>
+          <h3>VST плагины + эффекты</h3>
+          <p>Загружай VST2/VST3 прямо в клиент. Встроены: RNNoise AI, Noise Gate, Compressor, EQ. FFT анализатор в реальном времени.</p>
         </div>
         <div class="card feature-card">
           <div class="feature-icon">🖥️</div>
           <h3>Стриминг экрана</h3>
-          <p>Трансляция до 1080p60 с аппаратным H264 кодированием.</p>
+          <p>До 1080p с аппаратным H264 (NVENC), simulcast, zero-latency viewer без JPEG артефактов.</p>
         </div>
         <div class="card feature-card">
           <div class="feature-icon">🔒</div>
           <h3>Self-hosted</h3>
-          <p>Поднимай собственный сервер. Твои данные — только у тебя.</p>
+          <p>Поднимай собственный сервер. Твои данные — только у тебя. Docker Compose в 4 команды.</p>
         </div>
         <div class="card feature-card">
           <div class="feature-icon">🌍</div>
           <h3>Кросс-платформа</h3>
-          <p>Windows, Linux, macOS. Нативный клиент без Electron-overhead.</p>
+          <p>Windows, Linux, macOS. Нативный клиент на Tauri без Electron-overhead.</p>
         </div>
         <div class="card feature-card">
           <div class="feature-icon">💬</div>
           <h3>Текстовый чат</h3>
-          <p>Markdown, реакции, ответы на сообщения, @упоминания.</p>
+          <p>Markdown, @упоминания, роли участников. Всё в реальном времени через WebSocket.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screenshots -->
+    <section class="shots container">
+      <h2 class="section-title">Скриншоты</h2>
+      <p class="section-sub">Нативный клиент на Tauri + Vue 3</p>
+
+      <div class="shots-grid">
+        <div class="shot-item shot-wide">
+          <div class="shot-frame">
+            <img src="/shots/chat-dev.png" alt="Текстовые каналы" loading="lazy" />
+          </div>
+          <div class="shot-caption">Текстовые каналы · история сообщений · роли участников</div>
+        </div>
+        <div class="shot-item">
+          <div class="shot-frame">
+            <img src="/shots/effects.png" alt="Встроенные аудио эффекты" loading="lazy" />
+          </div>
+          <div class="shot-caption">Встроенные эффекты · FFT анализатор · RNNoise AI</div>
+        </div>
+        <div class="shot-item">
+          <div class="shot-frame shot-frame--login">
+            <img src="/shots/login.png" alt="Авторизация" loading="lazy" />
+          </div>
+          <div class="shot-caption">Авторизация · единый аккаунт для всех серверов</div>
         </div>
       </div>
     </section>
@@ -62,7 +95,7 @@
     <!-- Roadmap -->
     <section class="roadmap container">
       <h2 class="section-title">Roadmap</h2>
-      <p class="section-sub">Проект в активной разработке. Этапы идут последовательно.</p>
+      <p class="section-sub">Проект в активной разработке. Некоторые этапы реализованы параллельно.</p>
       <div class="roadmap-list">
         <div v-for="stage in stages" :key="stage.n" class="roadmap-item" :class="stage.status">
           <div class="roadmap-dot"></div>
@@ -137,7 +170,7 @@ OWNER_USERNAME=your_beyvox_username</pre>
         <h2>Готов попробовать?</h2>
         <p>Скачай клиент или подними свой сервер прямо сейчас.</p>
         <div class="cta-actions">
-          <a href="https://github.com/Beykus-Y/beyvox/releases/tag/v0.0.2" target="_blank" class="btn btn-primary">Скачать клиент</a>
+          <a href="https://github.com/Beykus-Y/beyvox/releases/tag/v0.4.1" target="_blank" class="btn btn-primary">Скачать клиент</a>
           <RouterLink to="/register" class="btn btn-ghost">Создать аккаунт</RouterLink>
         </div>
       </div>
@@ -156,11 +189,11 @@ function toggleFaq(i: number) {
 const stages = [
   { n: 1, status: 'done', label: 'Готово', title: 'Foundation', desc: 'Авторизация, JWT, JWKS, каталог серверов, базовая структура клиента.' },
   { n: 2, status: 'done', label: 'Готово', title: 'Voice MVP', desc: 'Голосовые каналы, LiveKit SFU, PTT, VAD, индикация говорящих.' },
-  { n: 3, status: 'done', label: 'Готово', title: 'Text Chat', desc: 'Сообщения в реальном времени, Markdown, реакции, @упоминания, создание каналов.' },
-  { n: 4, status: 'planned', label: 'Планируется', title: 'Roles & Moderation', desc: 'Полная матрица прав, кик, мут, бан, channel overrides.' },
-  { n: 5, status: 'planned', label: 'Планируется', title: 'Files & Media', desc: 'Вложения до 25 МБ, превью изображений и видео, Open Graph.' },
-  { n: 6, status: 'planned', label: 'Планируется', title: 'Screen Share', desc: 'Захват экрана/окна, 720p/1080p, simulcast H264+VP8.' },
-  { n: 7, status: 'planned', label: 'Планируется', title: 'VST Plugins', desc: 'Хостинг VST2/VST3, цепочка эффектов, нативный GUI плагина.' },
+  { n: 3, status: 'done', label: 'Готово', title: 'Text Chat', desc: 'Сообщения в реальном времени, Markdown, @упоминания, создание каналов и серверов.' },
+  { n: 4, status: 'done', label: 'Готово', title: 'Screen Share', desc: 'Захват экрана, simulcast H264, NVENC аппаратное ускорение, zero-latency viewer через raw RGBA.' },
+  { n: 5, status: 'done', label: 'Готово', title: 'Audio Effects & VST', desc: 'RNNoise AI шумодав, Noise Gate, Compressor/Limiter, 3-полосный EQ, FFT анализатор. Хостинг VST2/VST3 плагинов.' },
+  { n: 6, status: 'active', label: 'В разработке', title: 'Roles & Moderation', desc: 'Полная матрица прав, кик, мут, бан, channel overrides.' },
+  { n: 7, status: 'planned', label: 'Планируется', title: 'Files & Media', desc: 'Вложения до 25 МБ, превью изображений и видео, Open Graph.' },
   { n: 8, status: 'planned', label: 'Планируется', title: 'Polish', desc: 'Десктопные уведомления, статусы, офлайн-кэш, rate limiting, паблик-релиз.' },
 ]
 
@@ -168,14 +201,15 @@ const faq = [
   { q: 'Это бесплатно?', a: 'Да, BeyVox полностью бесплатен и с открытым исходным кодом. Клиент и серверная часть распространяются под лицензией MIT.' },
   { q: 'Нужен ли аккаунт на beyvox.beykus.fun для использования?', a: 'Да — аккаунт нужен для авторизации на всех серверах. JWT токен верифицируется локально через JWKS, так что серверу не нужен постоянный доступ к центральному сервису.' },
   { q: 'Насколько это безопасно?', a: 'Данные хранятся только на твоём сервере. Голос передаётся через WebRTC (DTLS-SRTP). Центральный сервер не имеет доступа к сообщениям и звонкам.' },
-  { q: 'В чём отличие от TeamSpeak / Mumble?', a: 'Современный стек (WebRTC, Tauri, Vue 3), текстовый чат с реакциями и @упоминаниями, VST плагины, стриминг экрана. При этом такой же self-hosted подход.' },
+  { q: 'В чём отличие от TeamSpeak / Mumble?', a: 'Современный стек (WebRTC, Tauri, Vue 3), текстовый чат, VST плагины прямо в клиенте, стриминг экрана с NVENC. При этом такой же self-hosted подход.' },
   { q: 'Когда будет мобильный клиент?', a: 'Мобильный клиент запланирован, но не входит в v1.0. Сначала нужно довести до стабильного состояния десктопную версию.' },
 ]
 </script>
 
 <style scoped>
+/* Hero */
 .hero {
-  padding: 100px 0 80px;
+  padding: 80px 0 0;
   text-align: center;
 }
 .badge {
@@ -209,9 +243,38 @@ h1 {
   gap: 12px;
   justify-content: center;
   flex-wrap: wrap;
+  margin-bottom: 56px;
 }
 
-.features { padding: 60px 0; }
+/* Hero preview screenshot */
+.hero-preview {
+  position: relative;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.hero-preview::before {
+  content: '';
+  position: absolute;
+  inset: -60px -40px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(91,124,246,0.12) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+.hero-preview img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  border-radius: 12px 12px 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  box-shadow:
+    0 -4px 40px rgba(91, 124, 246, 0.08),
+    0 0 0 1px rgba(255,255,255,0.04);
+  display: block;
+}
+
+/* Features */
+.features { padding: 70px 0 60px; }
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -220,10 +283,54 @@ h1 {
 .feature-card { display: flex; flex-direction: column; gap: 10px; }
 .feature-icon { font-size: 28px; }
 .feature-card h3 { font-size: 16px; font-weight: 600; }
-.feature-card p { color: var(--text2); font-size: 14px; }
+.feature-card p { color: var(--text2); font-size: 14px; line-height: 1.6; }
 
 .section-title { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
 .section-sub { color: var(--text2); margin-bottom: 36px; font-size: 15px; }
+
+/* Screenshots */
+.shots { padding: 20px 0 60px; }
+.shots-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 16px;
+}
+.shot-wide {
+  grid-column: 1 / -1;
+}
+.shot-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.shot-frame {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  background: var(--bg2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.shot-frame--login {
+  background: #0e0f14;
+}
+.shot-frame img {
+  width: 100%;
+  display: block;
+}
+.shot-frame--login img {
+  width: auto;
+  max-height: 340px;
+  margin: 0 auto;
+}
+.shot-caption {
+  font-size: 12px;
+  color: var(--text3);
+  text-align: center;
+}
 
 /* Roadmap */
 .roadmap { padding: 60px 0; }
@@ -249,7 +356,7 @@ h1 {
   height: 14px;
   border-radius: 50%;
   background: var(--border);
-  border: 2px solid var(--bg-dark);
+  border: 2px solid var(--bg);
   flex-shrink: 0;
 }
 .roadmap-item.done .roadmap-dot { background: var(--accent); }
@@ -261,7 +368,7 @@ h1 {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: var(--bg-hover);
+  background: var(--bg2);
   color: var(--text2);
 }
 .roadmap-item.done .roadmap-badge { background: rgba(91,124,246,0.15); color: var(--accent); }
